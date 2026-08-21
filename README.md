@@ -18,20 +18,14 @@ combined settings window.
   `EditorJsonUtility`) and push them onto a persisted history stack
 - **Tools > Kingfisher > K-Clipboard > History** lists the stack, most recent
   first, with a **Paste to Selected** button per entry
-- Paste applies to every currently selected GameObject that already has a
-  matching component
+- Paste applies to every currently selected GameObject - values overwrite a
+  matching component when the GameObject already has one, and the component is
+  added first when it does not
 - Configurable history cap (default 20 entries)
 - **Clear history** button to wipe the stack
 
 Everything is editor-only - the assembly is `Editor`-platform only, so nothing
 here is compiled into player builds.
-
-## v1 limitation
-
-Pasting overwrites an existing component's values - it does not add the
-component to a GameObject that doesn't already have one. Add the component
-first (Unity's own **Paste Component As New** works for this), then paste
-from K-Clipboard's history to fill in the values.
 
 ## Install
 

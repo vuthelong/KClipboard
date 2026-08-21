@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tools > Kingfisher > K-Clipboard > History** window listing the history
   stack, most recent first, with a "Paste to Selected" button per entry and a
   "Clear history" button.
+- Pasting an entry overwrites a matching component on every selected
+  GameObject, and adds the component first on the ones that don't have it, so
+  the target no longer has to be prepared by hand. Each paste is a single
+  undo step.
 - Configurable history cap (default 20 entries).
 - Per-tool settings window for when K-Setting is not installed; with it, the
   settings fold into **Tools > KTools Setting** instead.

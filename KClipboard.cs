@@ -14,13 +14,25 @@ namespace Kingfisher.KClipboard
 
         public const string DataFileName = "KClipboard Data.asset";
 
+        private const string CopyMenuPath = "CONTEXT/Component/Copy to K-Clipboard History";
+
+        private const string PasteUndoLabel = "Paste Component Values from K-Clipboard";
+
+        private const string EmptySelectionMessage = "Select at least one GameObject to paste into.";
+        private const string UnresolvedTypeFormat = "Component type '{0}' could not be resolved. It may belong to a script that was removed or renamed.";
+        private const string NotAComponentTypeFormat = "'{0}' is not a component type that can be pasted.";
+        private const string NothingPastedFormat = "Could not paste {0} onto any of the selected GameObjects.";
+        private const string PastedFormat = "Pasted {0} values onto {1} GameObject(s).";
+        private const string AddedSuffixFormat = " Added the component to {0} of them.";
+        private const string FailedSuffixFormat = " Failed on {0}.";
+
         public static KClipboardData Data;
 
         #endregion
 
         #region Context Menu
 
-        [MenuItem("CONTEXT/Component/Copy to K-Clipboard History")]
+        [MenuItem(CopyMenuPath)]
         private static void CopyToHistory(MenuCommand command)
         {
             if (KClipboardMenu.PluginDisabled) return;
@@ -33,6 +45,103 @@ namespace Kingfisher.KClipboard
             EnsureData().Push(componentType.AssemblyQualifiedName, componentType.Name, EditorJsonUtility.ToJson(component), Mathf.RoundToInt(KClipboardMenu.MaxHistoryCount));
 
             Libs.KData.Flush();
+        }
+
+        #endregion
+
+        #region Paste
+
+        public static bool TryPasteToSelected(KClipboardData.HistoryEntry entry, out string message)
+        {
+            var gameObjects = Selection.gameObjects;
+
+            if (gameObjects.Length == 0)
+            {
+                message = EmptySelectionMessage;
+
+                return false;
+            }
+
+            if (!TryResolveComponentType(entry, out var componentType, out message)) return false;
+
+            Undo.IncrementCurrentGroup();
+
+            var undoGroup = Undo.GetCurrentGroup();
+            var pastedCount = 0;
+            var addedCount = 0;
+
+            for (var i = 0; i < gameObjects.Length; i++)
+            {
+                var targetComponent = GetOrAddComponent(gameObjects[i], componentType, out var wasAdded);
+
+                if (targetComponent == null) continue;
+
+                if (wasAdded) addedCount++;
+
+                EditorJsonUtility.FromJsonOverwrite(entry.json, targetComponent);
+
+                targetComponent.Dirty();
+
+                pastedCount++;
+            }
+
+            Undo.SetCurrentGroupName(PasteUndoLabel);
+            Undo.CollapseUndoOperations(undoGroup);
+
+            message = BuildPasteMessage(entry.componentTypeLabel, pastedCount, addedCount, gameObjects.Length - pastedCount);
+
+            return pastedCount > 0;
+        }
+
+        private static bool TryResolveComponentType(KClipboardData.HistoryEntry entry, out Type componentType, out string message)
+        {
+            componentType = Type.GetType(entry.componentTypeName);
+
+            if (componentType == null)
+            {
+                message = string.Format(UnresolvedTypeFormat, entry.componentTypeLabel);
+
+                return false;
+            }
+
+            if (componentType.IsAbstract || !typeof(Component).IsAssignableFrom(componentType))
+            {
+                message = string.Format(NotAComponentTypeFormat, entry.componentTypeLabel);
+
+                return false;
+            }
+
+            message = string.Empty;
+
+            return true;
+        }
+
+        private static Component GetOrAddComponent(GameObject gameObject, Type componentType, out bool wasAdded)
+        {
+            var component = gameObject.GetComponent(componentType);
+
+            wasAdded = component == null;
+
+            if (!wasAdded)
+            {
+                Undo.RecordObject(component, PasteUndoLabel);
+
+                return component;
+            }
+
+            return Undo.AddComponent(gameObject, componentType);
+        }
+
+        private static string BuildPasteMessage(string componentTypeLabel, int pastedCount, int addedCount, int failedCount)
+        {
+            if (pastedCount == 0) return string.Format(NothingPastedFormat, componentTypeLabel);
+
+            var message = string.Format(PastedFormat, componentTypeLabel, pastedCount);
+
+            if (addedCount > 0) message += string.Format(AddedSuffixFormat, addedCount);
+            if (failedCount > 0) message += string.Format(FailedSuffixFormat, failedCount);
+
+            return message;
         }
 
         #endregion
@@ -64,63 +173,6 @@ namespace Kingfisher.KClipboard
             EnsureData().Clear();
 
             Libs.KData.Flush();
-        }
-
-        public static bool TryPasteToSelected(KClipboardData.HistoryEntry entry, out string message)
-        {
-            var gameObjects = Selection.gameObjects;
-
-            if (gameObjects.Length == 0)
-            {
-                message = "Select at least one GameObject to paste into.";
-
-                return false;
-            }
-
-            var componentType = Type.GetType(entry.componentTypeName);
-
-            if (componentType == null)
-            {
-                message = $"Component type '{entry.componentTypeLabel}' could not be resolved. It may belong to a script that was removed or renamed.";
-
-                return false;
-            }
-
-            var pastedCount = 0;
-            var skippedCount = 0;
-
-            for (var i = 0; i < gameObjects.Length; i++)
-            {
-                var targetComponent = gameObjects[i].GetComponent(componentType);
-
-                if (targetComponent == null)
-                {
-                    skippedCount++;
-
-                    continue;
-                }
-
-                Undo.RecordObject(targetComponent, "Paste Component Values from K-Clipboard");
-
-                EditorJsonUtility.FromJsonOverwrite(entry.json, targetComponent);
-
-                targetComponent.Dirty();
-
-                pastedCount++;
-            }
-
-            if (pastedCount == 0)
-            {
-                message = $"None of the selected GameObjects have a {entry.componentTypeLabel} component. Add the component first, then paste.";
-
-                return false;
-            }
-
-            message = skippedCount == 0
-                ? $"Pasted {entry.componentTypeLabel} values onto {pastedCount} GameObject(s)."
-                : $"Pasted {entry.componentTypeLabel} values onto {pastedCount} GameObject(s), skipped {skippedCount} without the component.";
-
-            return true;
         }
 
         #endregion
