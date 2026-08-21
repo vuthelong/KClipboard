@@ -12,7 +12,6 @@ namespace Kingfisher.KClipboard
 
         private const string MaxHistoryCountKey = KeyPrefix + "maxHistoryCount";
         private const string PluginDisabledKey = KeyPrefix + "pluginDisabled";
-        private const string DebugLoggingKey = KeyPrefix + "debugLoggingEnabled";
 
         private const int DefaultMaxHistoryCount = 20;
         private const int MinHistoryCount = 1;
@@ -22,9 +21,6 @@ namespace Kingfisher.KClipboard
         {
             "# History",
             "~MaxHistoryCount|Max history entries|" + MinHistoryCount + "|" + MaxHistoryCountLimit,
-
-            "# Debug",
-            "DebugLoggingEnabled|Enable debug logging",
         };
 
         #endregion
@@ -36,8 +32,6 @@ namespace Kingfisher.KClipboard
             get => EditorPrefsCached.GetInt(MaxHistoryCountKey, DefaultMaxHistoryCount);
             set => EditorPrefsCached.SetInt(MaxHistoryCountKey, Mathf.RoundToInt(value).Clamp(MinHistoryCount, MaxHistoryCountLimit));
         }
-
-        public static bool DebugLoggingEnabled { get => EditorPrefsCached.GetBool(DebugLoggingKey, false); set => EditorPrefsCached.SetBool(DebugLoggingKey, value); }
 
         public static bool PluginDisabled
         {

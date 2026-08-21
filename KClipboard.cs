@@ -14,8 +14,6 @@ namespace Kingfisher.KClipboard
 
         public const string DataFileName = "KClipboard Data.asset";
 
-        private const string DebugLogPrefix = "[KCLIP-DEBUG]";
-
         public static KClipboardData Data;
 
         #endregion
@@ -35,10 +33,6 @@ namespace Kingfisher.KClipboard
             EnsureData().Push(componentType.AssemblyQualifiedName, componentType.Name, EditorJsonUtility.ToJson(component), Mathf.RoundToInt(KClipboardMenu.MaxHistoryCount));
 
             Libs.KData.Flush();
-
-            if (!KClipboardMenu.DebugLoggingEnabled) return;
-
-            Debug.Log($"{DebugLogPrefix} Copied {componentType.Name} from '{component.gameObject.name}' to history.");
         }
 
         #endregion
