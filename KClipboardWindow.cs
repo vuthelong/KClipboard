@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEditor;
+using UnityEditorInternal;
 using UnityEngine;
 using static Kingfisher.KClipboard.Libs.KUtils;
 using static Kingfisher.KClipboard.Libs.KGUI;
@@ -73,6 +74,7 @@ namespace Kingfisher.KClipboard
         private const float LabelIndent = PinButtonSize + ActionGap;
 
         private const float SaveButtonWidth = 48f;
+        private const float CopyButtonWidth = 48f;
         private const int PreviewPadding = 6;
         private const float PreviewLabelWidthRatio = .4f;
         private const float MinPreviewLabelWidth = 110f;
@@ -104,6 +106,7 @@ namespace Kingfisher.KClipboard
         private static readonly GUIContent PreviewHeaderContent = new(PreviewHeaderLabel);
         private static readonly GUIContent ClearButtonContent = new("Clear history");
         private static readonly GUIContent SaveButtonContent = new("Save", "Write these values back to the history entry");
+        private static readonly GUIContent CopyButtonContent = new("Copy", "Copy these values to Unity's component clipboard");
 
         private static readonly GUILayoutOption[] ExpandWidthOptions = { GUILayout.ExpandWidth(true) };
 
@@ -424,12 +427,13 @@ namespace Kingfisher.KClipboard
         private void DrawPreview(Rect rect)
         {
             var headerRect = new Rect(rect.x, rect.y + DividerThickness, rect.width, _previewHeaderHeight);
-            var saveRect = new Rect(headerRect.xMax - SaveButtonWidth, headerRect.y, SaveButtonWidth, headerRect.height);
+            var copyRect = new Rect(headerRect.xMax - SaveButtonWidth - CopyButtonWidth, headerRect.y, CopyButtonWidth, headerRect.height);
+            var saveRect = new Rect(copyRect.xMax, headerRect.y, SaveButtonWidth, headerRect.height);
 
             new Rect(rect.x, rect.y, rect.width, DividerThickness).Draw(DividerColor);
 
-            DrawPreviewHeader(headerRect, saveRect);
-            HandlePreviewResize(new Rect(headerRect.x, headerRect.y, saveRect.x - headerRect.x, headerRect.height));
+            DrawPreviewHeader(headerRect, copyRect, saveRect);
+            HandlePreviewResize(new Rect(headerRect.x, headerRect.y, copyRect.x - headerRect.x, headerRect.height));
 
             GUILayout.BeginArea(new Rect(rect.x, headerRect.yMax, rect.width, rect.yMax - headerRect.yMax));
 
@@ -442,7 +446,7 @@ namespace Kingfisher.KClipboard
             GUILayout.EndArea();
         }
 
-        private void DrawPreviewHeader(Rect rect, Rect saveRect)
+        private void DrawPreviewHeader(Rect rect, Rect copyRect, Rect saveRect)
         {
             if (CurEvent.IsRepaint)
                 EditorStyles.toolbar.Draw(rect, false, false, false, false);
@@ -456,11 +460,25 @@ namespace Kingfisher.KClipboard
 
             ResetGUIEnabled();
 
-            DrawPreviewTitle(new Rect(titleX, rect.y, saveRect.x - Padding - titleX, rect.height));
+            DrawPreviewTitle(new Rect(titleX, rect.y, copyRect.x - Padding - titleX, rect.height));
 
+            DrawCopyButton(copyRect);
             DrawSaveButton(saveRect);
 
-            EditorGUIUtility.AddCursorRect(new Rect(rect.x, rect.y, saveRect.x - rect.x, rect.height), MouseCursor.ResizeVertical);
+            EditorGUIUtility.AddCursorRect(new Rect(rect.x, rect.y, copyRect.x - rect.x, rect.height), MouseCursor.ResizeVertical);
+        }
+
+        private void DrawCopyButton(Rect rect)
+        {
+            SetGUIEnabled(this._previewComponent != null);
+
+            var wasClicked = GUI.Button(rect, CopyButtonContent, EditorStyles.toolbarButton);
+
+            ResetGUIEnabled();
+
+            if (!wasClicked) return;
+
+            ComponentUtility.CopyComponent(this._previewComponent);
         }
 
         private void DrawPreviewTitle(Rect rect)

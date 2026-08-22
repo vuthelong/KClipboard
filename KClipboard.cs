@@ -40,6 +40,11 @@ namespace Kingfisher.KClipboard
 
             ComponentUtility.CopyComponent(component);
 
+            PushToHistory(component);
+        }
+
+        private static void PushToHistory(Component component)
+        {
             var componentType = component.GetType();
 
             EnsureData().Push(componentType.AssemblyQualifiedName, componentType.Name, EditorJsonUtility.ToJson(component), Mathf.RoundToInt(KClipboardMenu.MaxHistoryCount));
