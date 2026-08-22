@@ -16,7 +16,8 @@ namespace Kingfisher.KClipboard
         private const string WindowTitle = "K-Clipboard History";
         private const int MenuPriority = 912;
 
-        private const string EmptyHistoryLabel = "Nothing copied yet. Right-click a component and choose \"Copy to K-Clipboard History\".";
+        private const string EmptyTitle = "Nothing here";
+        private const string EmptyBody = "You will see your copied components here once you have copied something.";
         private const string NoSelectionHint = "Select GameObjects to paste into.";
 
         private const string PasteFailureLogFormat = "K-Clipboard: {0}";
@@ -56,21 +57,34 @@ namespace Kingfisher.KClipboard
         private const float TitleTimeGap = 2f;
 
         private const float ActionGap = 4f;
-        private const float PinButtonSize = 16f;
+        private const float PinIconSize = 16f;
+        private const float PinButtonSize = 26f;
+        private const int PinIconPadding = (int)((PinButtonSize - PinIconSize) * .5f);
+        private const float EmptyTextWidth = 260f;
+        private const float EmptyTitleGap = 2f;
+        private const float UnpinnedIconAlpha = .5f;
         private const float LabelIndent = PinButtonSize + ActionGap;
 
         private static readonly float RowHeight = RowPadding * 2f + EditorGUIUtility.singleLineHeight * 2f + TitleTimeGap;
         private static readonly float ActionButtonSize = RowHeight;
+
+        private static readonly Color PinnedIconColor = Greyscale(1f);
+        private static readonly Color UnpinnedIconColor = Greyscale(1f, UnpinnedIconAlpha);
         private static readonly float ActionsWidth = (ActionButtonSize + ActionGap) * ActionButtonCount;
 
         private static readonly GUIContent NoSelectionHintContent = new(NoSelectionHint);
+        private static readonly GUIContent EmptyTitleContent = new(EmptyTitle);
+        private static readonly GUIContent EmptyBodyContent = new(EmptyBody);
         private static readonly GUIContent ClearButtonContent = new("Clear history");
 
         private static readonly GUILayoutOption[] ExpandWidthOptions = { GUILayout.ExpandWidth(true) };
+        private static readonly GUILayoutOption[] ExpandOptions = { GUILayout.ExpandWidth(true), GUILayout.ExpandHeight(true) };
 
         private static GUIStyle _evenRowStyle;
         private static GUIStyle _oddRowStyle;
         private static GUIStyle _actionButtonStyle;
+        private static GUIStyle _emptyTitleStyle;
+        private static GUIStyle _emptyBodyStyle;
         private static GUIStyle _iconButtonStyle;
         private static GUIContent _pinnedIconContent;
         private static GUIContent _unpinnedIconContent;
@@ -118,12 +132,7 @@ namespace Kingfisher.KClipboard
             UpdateActionsAnimation();
 
             DrawToolbar();
-
-            this._scroll = EditorGUILayout.BeginScrollView(this._scroll);
-
-            DrawRows();
-
-            EditorGUILayout.EndScrollView();
+            DrawBody();
 
             ApplyPendingRemoval();
             ApplyPendingPin();
@@ -171,19 +180,48 @@ namespace Kingfisher.KClipboard
             ResetGUIEnabled();
         }
 
+        private void DrawBody()
+        {
+            if (Entries.Count == 0)
+            {
+                DrawEmptyMessage(GUILayoutUtility.GetRect(0f, 0f, ExpandOptions));
+
+                return;
+            }
+
+            this._scroll = EditorGUILayout.BeginScrollView(this._scroll);
+
+            DrawRows();
+
+            EditorGUILayout.EndScrollView();
+        }
+
+        private static void DrawEmptyMessage(Rect rect)
+        {
+            var width = Mathf.Min(rect.width - Padding * 2f, EmptyTextWidth);
+
+            if (width <= 0f) return;
+
+            var titleHeight = EditorGUIUtility.singleLineHeight;
+            var bodyHeight = _emptyBodyStyle.CalcHeight(EmptyBodyContent, width);
+            var x = rect.x + (rect.width - width) * .5f;
+            var y = rect.y + (rect.height - titleHeight - EmptyTitleGap - bodyHeight) * .5f;
+
+            GUI.Label(new Rect(x, y, width, titleHeight), EmptyTitleContent, _emptyTitleStyle);
+
+            SetGUIEnabled(false);
+
+            GUI.Label(new Rect(x, y + titleHeight + EmptyTitleGap, width, bodyHeight), EmptyBodyContent, _emptyBodyStyle);
+
+            ResetGUIEnabled();
+        }
+
         private void DrawRows()
         {
             if (CurEvent.IsRepaint)
                 this._hoveredIndex = NoIndex;
 
             var entries = Entries;
-
-            if (entries.Count == 0)
-            {
-                EditorGUILayout.HelpBox(EmptyHistoryLabel, MessageType.Info);
-
-                return;
-            }
 
             for (var i = 0; i < entries.Count; i++)
                 DrawRow(entries[i], this._timeLabels[i], i);
@@ -224,7 +262,7 @@ namespace Kingfisher.KClipboard
 
         private void DrawEntry(Rect contentRect, KClipboardData.HistoryEntry entry, string timeLabel, int index)
         {
-            DrawPinToggle(new Rect(contentRect.x, contentRect.y + (contentRect.height - PinButtonSize) * .5f, PinButtonSize, PinButtonSize), entry, index);
+            DrawPinButton(new Rect(contentRect.x, contentRect.y + (contentRect.height - PinButtonSize) * .5f, PinButtonSize, PinButtonSize), entry, index);
 
             var labelX = contentRect.x + LabelIndent;
             var labelWidth = contentRect.xMax - labelX;
@@ -236,12 +274,15 @@ namespace Kingfisher.KClipboard
             DrawTimeLabel(new Rect(labelX, contentRect.yMax - EditorGUIUtility.singleLineHeight, labelWidth, EditorGUIUtility.singleLineHeight), timeLabel);
         }
 
-        private void DrawPinToggle(Rect rect, KClipboardData.HistoryEntry entry, int index)
+        private void DrawPinButton(Rect rect, KClipboardData.HistoryEntry entry, int index)
         {
-            var isVisible = entry.pinned || index == this._hoveredIndex;
-            var content = entry.pinned ? _pinnedIconContent : _unpinnedIconContent;
+            SetGUIColor(entry.pinned ? PinnedIconColor : UnpinnedIconColor);
 
-            if (GUI.Toggle(rect, entry.pinned, isVisible ? content : GUIContent.none, _iconButtonStyle) == entry.pinned) return;
+            var wasClicked = GUI.Button(rect, entry.pinned ? _pinnedIconContent : _unpinnedIconContent, _iconButtonStyle);
+
+            ResetGUIColor();
+
+            if (!wasClicked) return;
 
             this._pendingPinIndex = index;
         }
@@ -409,7 +450,17 @@ namespace Kingfisher.KClipboard
 
             _actionButtonStyle = new GUIStyle(GUI.skin.button) { alignment = TextAnchor.MiddleCenter, fixedHeight = 0f, fixedWidth = 0f };
 
-            _iconButtonStyle = new GUIStyle(EditorStyles.iconButton) { alignment = TextAnchor.MiddleCenter, fixedHeight = 0f, fixedWidth = 0f };
+            _emptyTitleStyle = new GUIStyle(EditorStyles.boldLabel) { alignment = TextAnchor.MiddleCenter, wordWrap = true };
+
+            _emptyBodyStyle = new GUIStyle(EditorStyles.miniLabel) { alignment = TextAnchor.UpperCenter, wordWrap = true };
+
+            _iconButtonStyle = new GUIStyle(EditorStyles.iconButton)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                padding = new RectOffset(PinIconPadding, PinIconPadding, PinIconPadding, PinIconPadding),
+                fixedHeight = 0f,
+                fixedWidth = 0f,
+            };
 
             _pinnedIconContent = new GUIContent(EditorIcons.GetTexture(PinnedIconName), PinnedTooltip);
             _unpinnedIconContent = new GUIContent(EditorIcons.GetTexture(UnpinnedIconName), UnpinnedTooltip);
