@@ -143,6 +143,7 @@ namespace Kingfisher.KClipboard
         private int _animatedActionsIndex = NoIndex;
         private int _pendingRemovalIndex = NoIndex;
         private int _pendingPinIndex = NoIndex;
+        private int _timeLabelsVersion = NoIndex;
         private float _actionsAmount;
         private float _deltaTime;
         private double _lastLayoutTime;
@@ -178,9 +179,17 @@ namespace Kingfisher.KClipboard
             wantsMouseMove = true;
 
             this._hasSelection = Selection.gameObjects.Length > 0;
+
+            EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
+            EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
         }
 
-        private void OnDisable() => DestroyPreview();
+        private void OnDisable()
+        {
+            EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
+
+            DestroyPreview();
+        }
 
         private void OnGUI()
         {
@@ -608,7 +617,9 @@ namespace Kingfisher.KClipboard
             if (!this._isResizingPreview) return;
             if (!CurEvent.IsMouseDrag) return;
 
-            this.previewHeight -= CurEvent.MouseDelta.y;
+            var maxHeight = Mathf.Max(MinPreviewHeight, position.height - MinListHeight);
+
+            this.previewHeight = Mathf.Clamp(this.previewHeight - CurEvent.MouseDelta.y, MinPreviewHeight, maxHeight);
 
             CurEvent.Use();
 
@@ -617,13 +628,14 @@ namespace Kingfisher.KClipboard
 
         private void EnsurePreview()
         {
-            if (this._previewEntry == this._selectedEntry && this._previewEditor) return;
+            if (this._previewEntry == this._selectedEntry) return;
 
             DestroyPreview();
 
             this._previewEntry = this._selectedEntry;
 
             if (this._previewEntry == null) return;
+            if (EditorApplication.isPlayingOrWillChangePlaymode) return;
             if (string.IsNullOrEmpty(this._previewEntry.componentTypeName)) return;
 
             var componentType = Type.GetType(this._previewEntry.componentTypeName);
@@ -650,6 +662,13 @@ namespace Kingfisher.KClipboard
             this._previewEditor = Editor.CreateEditor(this._previewComponent);
 
             RefreshPreviewTitle();
+        }
+
+        private void OnPlayModeStateChanged(PlayModeStateChange change)
+        {
+            if (change != PlayModeStateChange.ExitingEditMode && change != PlayModeStateChange.EnteredEditMode) return;
+
+            DestroyPreview();
         }
 
         private void RefreshPreviewTitle()
@@ -704,8 +723,6 @@ namespace Kingfisher.KClipboard
             KClipboard.TogglePinned(this._pendingPinIndex);
 
             this._pendingPinIndex = NoIndex;
-
-            this._timeLabels.Clear();
 
             Repaint();
         }
@@ -791,13 +808,16 @@ namespace Kingfisher.KClipboard
 
         private void RefreshTimeLabels()
         {
-            var entries = Entries;
+            var data = KClipboard.EnsureData();
+            var entries = data.entries;
+            var hasDataChanged = this._timeLabelsVersion != data.Version;
 
-            if (this._timeLabels.Count == entries.Count && EditorApplication.timeSinceStartup < this._nextTimeLabelRefresh) return;
+            if (!hasDataChanged && EditorApplication.timeSinceStartup < this._nextTimeLabelRefresh) return;
 
-            if (this._timeLabels.Count != entries.Count)
+            if (hasDataChanged)
                 ValidateSelection();
 
+            this._timeLabelsVersion = data.Version;
             this._nextTimeLabelRefresh = EditorApplication.timeSinceStartup + TimeLabelRefreshInterval;
 
             this._timeLabels.Clear();

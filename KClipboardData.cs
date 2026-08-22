@@ -14,6 +14,14 @@ namespace Kingfisher.KClipboard
 
         public List<HistoryEntry> entries = new();
 
+        private int _version;
+
+        #endregion
+
+        #region Property
+
+        public int Version => this._version;
+
         #endregion
 
         #region Entry
@@ -33,7 +41,7 @@ namespace Kingfisher.KClipboard
                 this.entries.RemoveAt(trimIndex);
             }
 
-            this.Dirty();
+            MarkChanged();
         }
 
         public void TogglePinned(int index)
@@ -47,7 +55,7 @@ namespace Kingfisher.KClipboard
             this.entries.RemoveAt(index);
             this.entries.Insert(GetSortedIndex(entry), entry);
 
-            this.Dirty();
+            MarkChanged();
         }
 
         public void SetJson(HistoryEntry entry, string json)
@@ -57,7 +65,7 @@ namespace Kingfisher.KClipboard
 
             entry.json = json;
 
-            this.Dirty();
+            MarkChanged();
         }
 
         public void SetIconName(HistoryEntry entry, string iconName)
@@ -67,7 +75,7 @@ namespace Kingfisher.KClipboard
 
             entry.iconName = iconName;
 
-            this.Dirty();
+            MarkChanged();
         }
 
         public void RemoveAt(int index)
@@ -76,7 +84,7 @@ namespace Kingfisher.KClipboard
 
             this.entries.RemoveAt(index);
 
-            this.Dirty();
+            MarkChanged();
         }
 
         public void Clear()
@@ -88,7 +96,7 @@ namespace Kingfisher.KClipboard
                 this.entries.RemoveAt(i);
             }
 
-            this.Dirty();
+            MarkChanged();
         }
 
         #endregion
@@ -123,6 +131,13 @@ namespace Kingfisher.KClipboard
             }
 
             return this.entries.Count;
+        }
+
+        private void MarkChanged()
+        {
+            this._version++;
+
+            this.Dirty();
         }
 
         private int GetLastUnpinnedIndex()
