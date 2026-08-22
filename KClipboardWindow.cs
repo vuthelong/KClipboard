@@ -66,6 +66,7 @@ namespace Kingfisher.KClipboard
         private const float ActionGap = 4f;
         private const float ActionButtonGap = 2f;
         private const float PinIconSize = 16f;
+        private const float RowIconSize = 16f;
         private const float PinButtonSize = 26f;
         private const int PinIconPadding = (int)((PinButtonSize - PinIconSize) * .5f);
         private const float EmptyTextWidth = 260f;
@@ -109,6 +110,7 @@ namespace Kingfisher.KClipboard
         private static readonly GUIContent CopyButtonContent = new("Copy", "Copy these values to Unity's component clipboard");
 
         private static readonly GUILayoutOption[] ExpandWidthOptions = { GUILayout.ExpandWidth(true) };
+        private static readonly Dictionary<string, Texture> IconsByTypeName = new();
 
         private static GUIStyle _selectedRowStyle;
         private static float _previewHeaderHeight;
@@ -363,12 +365,34 @@ namespace Kingfisher.KClipboard
         {
             DrawPinButton(new Rect(contentRect.x, contentRect.y + (contentRect.height - PinButtonSize) * .5f, PinButtonSize, PinButtonSize), entry, index);
 
-            var labelX = contentRect.x + LabelIndent;
+            var iconX = contentRect.x + LabelIndent;
+            var labelX = iconX + RowIconSize + ActionGap;
             var labelWidth = Mathf.Max(contentRect.xMax - labelX, 0f);
+
+            DrawRowIcon(new Rect(iconX, contentRect.y + (EditorGUIUtility.singleLineHeight - RowIconSize) * .5f, RowIconSize, RowIconSize), entry);
 
             GUI.Label(new Rect(labelX, contentRect.y, labelWidth, EditorGUIUtility.singleLineHeight), entry.componentTypeLabel);
 
             DrawTimeLabel(new Rect(labelX, contentRect.yMax - EditorGUIUtility.singleLineHeight, labelWidth, EditorGUIUtility.singleLineHeight), timeLabel);
+        }
+
+        private static void DrawRowIcon(Rect rect, KClipboardData.HistoryEntry entry)
+        {
+            var icon = GetComponentIcon(entry.componentTypeName);
+
+            if (icon == null) return;
+
+            GUI.DrawTexture(rect, icon, ScaleMode.ScaleToFit);
+        }
+
+        private static Texture GetComponentIcon(string componentTypeName)
+        {
+            if (string.IsNullOrEmpty(componentTypeName)) return null;
+            if (IconsByTypeName.TryGetValue(componentTypeName, out var cached)) return cached;
+
+            var componentType = Type.GetType(componentTypeName);
+
+            return IconsByTypeName[componentTypeName] = componentType == null ? null : EditorGUIUtility.ObjectContent(null, componentType).image;
         }
 
         private void DrawPinButton(Rect rect, KClipboardData.HistoryEntry entry, int index)
@@ -433,13 +457,13 @@ namespace Kingfisher.KClipboard
         private void DrawPreview(Rect rect)
         {
             var headerRect = new Rect(rect.x, rect.y + DividerThickness, rect.width, _previewHeaderHeight);
-            var copyRect = new Rect(headerRect.xMax - SaveButtonWidth - CopyButtonWidth, headerRect.y, CopyButtonWidth, headerRect.height);
-            var saveRect = new Rect(copyRect.xMax, headerRect.y, SaveButtonWidth, headerRect.height);
+            var saveRect = new Rect(headerRect.xMax - CopyButtonWidth - SaveButtonWidth, headerRect.y, SaveButtonWidth, headerRect.height);
+            var copyRect = new Rect(saveRect.xMax, headerRect.y, CopyButtonWidth, headerRect.height);
 
             new Rect(rect.x, rect.y, rect.width, DividerThickness).Draw(DividerColor);
 
-            DrawPreviewHeader(headerRect, copyRect, saveRect);
-            HandlePreviewResize(new Rect(headerRect.x, headerRect.y, copyRect.x - headerRect.x, headerRect.height));
+            DrawPreviewHeader(headerRect, saveRect, copyRect);
+            HandlePreviewResize(new Rect(headerRect.x, headerRect.y, saveRect.x - headerRect.x, headerRect.height));
 
             GUILayout.BeginArea(new Rect(rect.x, headerRect.yMax, rect.width, rect.yMax - headerRect.yMax));
 
@@ -452,7 +476,7 @@ namespace Kingfisher.KClipboard
             GUILayout.EndArea();
         }
 
-        private void DrawPreviewHeader(Rect rect, Rect copyRect, Rect saveRect)
+        private void DrawPreviewHeader(Rect rect, Rect saveRect, Rect copyRect)
         {
             if (CurEvent.IsRepaint)
                 EditorStyles.toolbar.Draw(rect, false, false, false, false);
@@ -466,12 +490,12 @@ namespace Kingfisher.KClipboard
 
             ResetGUIEnabled();
 
-            DrawPreviewTitle(new Rect(titleX, rect.y, copyRect.x - Padding - titleX, rect.height));
+            DrawPreviewTitle(new Rect(titleX, rect.y, saveRect.x - Padding - titleX, rect.height));
 
-            DrawCopyButton(copyRect);
             DrawSaveButton(saveRect);
+            DrawCopyButton(copyRect);
 
-            EditorGUIUtility.AddCursorRect(new Rect(rect.x, rect.y, copyRect.x - rect.x, rect.height), MouseCursor.ResizeVertical);
+            EditorGUIUtility.AddCursorRect(new Rect(rect.x, rect.y, saveRect.x - rect.x, rect.height), MouseCursor.ResizeVertical);
         }
 
         private void DrawCopyButton(Rect rect)
@@ -776,6 +800,8 @@ namespace Kingfisher.KClipboard
 
             _hasBuiltStyles = true;
             _isStyleDark = IsDarkTheme;
+
+            IconsByTypeName.Clear();
 
             _selectedRowStyle = GUI.skin.FindStyle(SelectedRowStyleName);
             _previewHeaderHeight = Mathf.Max(GUI.skin.FindStyle(TitlebarStyleName)?.fixedHeight ?? 0f, MinPreviewHeaderHeight);
