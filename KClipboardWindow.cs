@@ -110,7 +110,7 @@ namespace Kingfisher.KClipboard
         private static readonly GUIContent CopyButtonContent = new("Copy", "Copy these values to Unity's component clipboard");
 
         private static readonly GUILayoutOption[] ExpandWidthOptions = { GUILayout.ExpandWidth(true) };
-        private static readonly Dictionary<string, Texture> IconsByTypeName = new();
+        private static readonly Dictionary<string, Texture> IconsByKey = new();
 
         private static GUIStyle _selectedRowStyle;
         private static float _previewHeaderHeight;
@@ -368,31 +368,48 @@ namespace Kingfisher.KClipboard
             var iconX = contentRect.x + LabelIndent;
             var labelX = iconX + RowIconSize + ActionGap;
             var labelWidth = Mathf.Max(contentRect.xMax - labelX, 0f);
+            var timeWidth = Mathf.Max(contentRect.xMax - iconX, 0f);
 
             DrawRowIcon(new Rect(iconX, contentRect.y + (EditorGUIUtility.singleLineHeight - RowIconSize) * .5f, RowIconSize, RowIconSize), entry);
 
             GUI.Label(new Rect(labelX, contentRect.y, labelWidth, EditorGUIUtility.singleLineHeight), entry.componentTypeLabel);
 
-            DrawTimeLabel(new Rect(labelX, contentRect.yMax - EditorGUIUtility.singleLineHeight, labelWidth, EditorGUIUtility.singleLineHeight), timeLabel);
+            DrawTimeLabel(new Rect(iconX, contentRect.yMax - EditorGUIUtility.singleLineHeight, timeWidth, EditorGUIUtility.singleLineHeight), timeLabel);
         }
 
         private static void DrawRowIcon(Rect rect, KClipboardData.HistoryEntry entry)
         {
-            var icon = GetComponentIcon(entry.componentTypeName);
+            var icon = GetComponentIcon(entry);
 
             if (icon == null) return;
 
             GUI.DrawTexture(rect, icon, ScaleMode.ScaleToFit);
         }
 
-        private static Texture GetComponentIcon(string componentTypeName)
+        private static Texture GetComponentIcon(KClipboardData.HistoryEntry entry)
         {
-            if (string.IsNullOrEmpty(componentTypeName)) return null;
-            if (IconsByTypeName.TryGetValue(componentTypeName, out var cached)) return cached;
+            var key = string.IsNullOrEmpty(entry.iconName) ? entry.componentTypeName : entry.iconName;
 
-            var componentType = Type.GetType(componentTypeName);
+            if (string.IsNullOrEmpty(key)) return null;
+            if (IconsByKey.TryGetValue(key, out var cached)) return cached;
 
-            return IconsByTypeName[componentTypeName] = componentType == null ? null : EditorGUIUtility.ObjectContent(null, componentType).image;
+            return IconsByKey[key] = LoadComponentIcon(entry);
+        }
+
+        private static Texture LoadComponentIcon(KClipboardData.HistoryEntry entry)
+        {
+            if (!string.IsNullOrEmpty(entry.iconName))
+            {
+                var namedIcon = EditorGUIUtility.FindTexture(entry.iconName);
+
+                if (namedIcon != null) return namedIcon;
+            }
+
+            if (string.IsNullOrEmpty(entry.componentTypeName)) return null;
+
+            var componentType = Type.GetType(entry.componentTypeName);
+
+            return componentType == null ? null : EditorGUIUtility.ObjectContent(null, componentType).image;
         }
 
         private void DrawPinButton(Rect rect, KClipboardData.HistoryEntry entry, int index)
@@ -542,7 +559,9 @@ namespace Kingfisher.KClipboard
 
             GUIUtility.keyboardControl = 0;
 
-            KClipboard.UpdateEntryJson(this._previewEntry, EditorJsonUtility.ToJson(this._previewComponent));
+            KClipboard.UpdateEntry(this._previewEntry, this._previewComponent);
+
+            RefreshPreviewTitle();
 
             this._hasPreviewEdits = false;
         }
@@ -629,7 +648,15 @@ namespace Kingfisher.KClipboard
             EditorJsonUtility.FromJsonOverwrite(this._previewEntry.json, this._previewComponent);
 
             this._previewEditor = Editor.CreateEditor(this._previewComponent);
-            this._previewTitleContent = new GUIContent(this._previewEntry.componentTypeLabel, EditorGUIUtility.ObjectContent(this._previewComponent, componentType).image);
+
+            RefreshPreviewTitle();
+        }
+
+        private void RefreshPreviewTitle()
+        {
+            if (this._previewEntry == null) return;
+
+            this._previewTitleContent = new GUIContent(this._previewEntry.componentTypeLabel, GetComponentIcon(this._previewEntry));
         }
 
         private void DestroyPreview()
@@ -801,7 +828,7 @@ namespace Kingfisher.KClipboard
             _hasBuiltStyles = true;
             _isStyleDark = IsDarkTheme;
 
-            IconsByTypeName.Clear();
+            IconsByKey.Clear();
 
             _selectedRowStyle = GUI.skin.FindStyle(SelectedRowStyleName);
             _previewHeaderHeight = Mathf.Max(GUI.skin.FindStyle(TitlebarStyleName)?.fixedHeight ?? 0f, MinPreviewHeaderHeight);

@@ -16,6 +16,8 @@ namespace Kingfisher.KClipboard
 
         private const string CopyMenuPath = "CONTEXT/Component/Copy to K-Clipboard History";
 
+        private const string DarkIconPrefix = "d_";
+
         private const string PasteUndoLabel = "Paste Component Values from K-Clipboard";
 
         private const string EmptySelectionMessage = "Select at least one GameObject to paste into.";
@@ -47,9 +49,26 @@ namespace Kingfisher.KClipboard
         {
             var componentType = component.GetType();
 
-            EnsureData().Push(componentType.AssemblyQualifiedName, componentType.Name, EditorJsonUtility.ToJson(component), Mathf.RoundToInt(KClipboardMenu.MaxHistoryCount));
+            EnsureData().Push(new KClipboardData.HistoryEntry
+            {
+                componentTypeName = componentType.AssemblyQualifiedName,
+                componentTypeLabel = componentType.Name,
+                iconName = GetIconName(component),
+                json = EditorJsonUtility.ToJson(component),
+            }, Mathf.RoundToInt(KClipboardMenu.MaxHistoryCount));
 
             Libs.KData.Flush();
+        }
+
+        public static string GetIconName(Component component)
+        {
+            if (component == null) return string.Empty;
+
+            var icon = EditorGUIUtility.ObjectContent(component, component.GetType()).image;
+
+            if (icon == null) return string.Empty;
+
+            return icon.name.StartsWith(DarkIconPrefix) ? icon.name.Substring(DarkIconPrefix.Length) : icon.name;
         }
 
         #endregion
@@ -187,7 +206,13 @@ namespace Kingfisher.KClipboard
             Libs.KData.Flush();
         }
 
-        public static void UpdateEntryJson(KClipboardData.HistoryEntry entry, string json) => EnsureData().SetJson(entry, json);
+        public static void UpdateEntry(KClipboardData.HistoryEntry entry, Component component)
+        {
+            var data = EnsureData();
+
+            data.SetJson(entry, EditorJsonUtility.ToJson(component));
+            data.SetIconName(entry, GetIconName(component));
+        }
 
         public static void ClearHistory()
         {

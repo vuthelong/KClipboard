@@ -18,15 +18,11 @@ namespace Kingfisher.KClipboard
 
         #region Entry
 
-        public void Push(string componentTypeName, string componentTypeLabel, string json, int maxCount)
+        public void Push(HistoryEntry entry, int maxCount)
         {
-            this.entries.Insert(GetPinnedCount(), new HistoryEntry
-            {
-                componentTypeName = componentTypeName,
-                componentTypeLabel = componentTypeLabel,
-                json = json,
-                timestampTicks = DateTime.UtcNow.Ticks,
-            });
+            entry.timestampTicks = DateTime.UtcNow.Ticks;
+
+            this.entries.Insert(GetPinnedCount(), entry);
 
             while (this.entries.Count > maxCount.Max(0))
             {
@@ -60,6 +56,16 @@ namespace Kingfisher.KClipboard
             if (entry.json == json) return;
 
             entry.json = json;
+
+            this.Dirty();
+        }
+
+        public void SetIconName(HistoryEntry entry, string iconName)
+        {
+            if (entry == null) return;
+            if (entry.iconName == iconName) return;
+
+            entry.iconName = iconName;
 
             this.Dirty();
         }
@@ -140,6 +146,7 @@ namespace Kingfisher.KClipboard
         {
             public string componentTypeName;
             public string componentTypeLabel;
+            public string iconName;
             public string json;
             public long timestampTicks;
             public bool pinned;
