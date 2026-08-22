@@ -40,7 +40,7 @@ namespace Kingfisher.KClipboard
         private const string DaysAgoFormat = "{0}d ago";
 
         private const int NoIndex = -1;
-        private const int ActionButtonCount = 3;
+        private const int ActionButtonCount = 2;
 
         private const double TimeLabelRefreshInterval = 1d;
 
@@ -56,6 +56,8 @@ namespace Kingfisher.KClipboard
         private const float TitleTimeGap = 2f;
 
         private const float ActionGap = 4f;
+        private const float PinButtonSize = 16f;
+        private const float LabelIndent = PinButtonSize + ActionGap;
 
         private static readonly float RowHeight = RowPadding * 2f + EditorGUIUtility.singleLineHeight * 2f + TitleTimeGap;
         private static readonly float ActionButtonSize = RowHeight;
@@ -69,6 +71,7 @@ namespace Kingfisher.KClipboard
         private static GUIStyle _evenRowStyle;
         private static GUIStyle _oddRowStyle;
         private static GUIStyle _actionButtonStyle;
+        private static GUIStyle _iconButtonStyle;
         private static GUIContent _pinnedIconContent;
         private static GUIContent _unpinnedIconContent;
         private static GUIContent _pasteIconContent;
@@ -203,7 +206,7 @@ namespace Kingfisher.KClipboard
 
             if (contentRect.width <= 0f) return;
 
-            DrawEntry(contentRect, entry, timeLabel);
+            DrawEntry(contentRect, entry, timeLabel, index);
 
             if (!isAnimated) return;
 
@@ -219,11 +222,28 @@ namespace Kingfisher.KClipboard
             style?.Draw(rowRect, false, false, false, false);
         }
 
-        private static void DrawEntry(Rect contentRect, KClipboardData.HistoryEntry entry, string timeLabel)
+        private void DrawEntry(Rect contentRect, KClipboardData.HistoryEntry entry, string timeLabel, int index)
         {
-            GUI.Label(new Rect(contentRect.x, contentRect.y, contentRect.width, EditorGUIUtility.singleLineHeight), entry.componentTypeLabel);
+            DrawPinToggle(new Rect(contentRect.x, contentRect.y + (contentRect.height - PinButtonSize) * .5f, PinButtonSize, PinButtonSize), entry, index);
 
-            DrawTimeLabel(new Rect(contentRect.x, contentRect.yMax - EditorGUIUtility.singleLineHeight, contentRect.width, EditorGUIUtility.singleLineHeight), timeLabel);
+            var labelX = contentRect.x + LabelIndent;
+            var labelWidth = contentRect.xMax - labelX;
+
+            if (labelWidth <= 0f) return;
+
+            GUI.Label(new Rect(labelX, contentRect.y, labelWidth, EditorGUIUtility.singleLineHeight), entry.componentTypeLabel);
+
+            DrawTimeLabel(new Rect(labelX, contentRect.yMax - EditorGUIUtility.singleLineHeight, labelWidth, EditorGUIUtility.singleLineHeight), timeLabel);
+        }
+
+        private void DrawPinToggle(Rect rect, KClipboardData.HistoryEntry entry, int index)
+        {
+            var isVisible = entry.pinned || index == this._hoveredIndex;
+            var content = entry.pinned ? _pinnedIconContent : _unpinnedIconContent;
+
+            if (GUI.Toggle(rect, entry.pinned, isVisible ? content : GUIContent.none, _iconButtonStyle) == entry.pinned) return;
+
+            this._pendingPinIndex = index;
         }
 
         private static void DrawTimeLabel(Rect rect, string timeLabel)
@@ -239,8 +259,7 @@ namespace Kingfisher.KClipboard
         {
             var slideOffset = ActionsWidth * (1f - this._actionsAmount);
             var deleteRect = new Rect(rowRect.xMax - Padding - ActionButtonSize + slideOffset, rowRect.y, ActionButtonSize, ActionButtonSize);
-            var pinRect = new Rect(deleteRect.x - ActionGap - ActionButtonSize, rowRect.y, ActionButtonSize, ActionButtonSize);
-            var pasteRect = new Rect(pinRect.x - ActionGap - ActionButtonSize, rowRect.y, ActionButtonSize, ActionButtonSize);
+            var pasteRect = new Rect(deleteRect.x - ActionGap - ActionButtonSize, rowRect.y, ActionButtonSize, ActionButtonSize);
 
             SetGUIEnabled(this._hasSelection);
 
@@ -251,18 +270,9 @@ namespace Kingfisher.KClipboard
             if (wasPasteClicked)
                 PasteEntry(entry);
 
-            DrawPinToggle(pinRect, entry, index);
-
             if (!GUI.Button(deleteRect, _deleteIconContent, _actionButtonStyle)) return;
 
             this._pendingRemovalIndex = index;
-        }
-
-        private void DrawPinToggle(Rect rect, KClipboardData.HistoryEntry entry, int index)
-        {
-            if (GUI.Toggle(rect, entry.pinned, entry.pinned ? _pinnedIconContent : _unpinnedIconContent, _actionButtonStyle) == entry.pinned) return;
-
-            this._pendingPinIndex = index;
         }
 
         #endregion
@@ -398,6 +408,8 @@ namespace Kingfisher.KClipboard
             _oddRowStyle = GUI.skin.FindStyle(OddRowStyleName);
 
             _actionButtonStyle = new GUIStyle(GUI.skin.button) { alignment = TextAnchor.MiddleCenter, fixedHeight = 0f, fixedWidth = 0f };
+
+            _iconButtonStyle = new GUIStyle(EditorStyles.iconButton) { alignment = TextAnchor.MiddleCenter, fixedHeight = 0f, fixedWidth = 0f };
 
             _pinnedIconContent = new GUIContent(EditorIcons.GetTexture(PinnedIconName), PinnedTooltip);
             _unpinnedIconContent = new GUIContent(EditorIcons.GetTexture(UnpinnedIconName), UnpinnedTooltip);
