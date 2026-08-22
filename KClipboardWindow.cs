@@ -57,6 +57,7 @@ namespace Kingfisher.KClipboard
         private const float TitleTimeGap = 2f;
 
         private const float ActionGap = 4f;
+        private const float ActionButtonGap = 2f;
         private const float PinIconSize = 16f;
         private const float PinButtonSize = 26f;
         private const int PinIconPadding = (int)((PinButtonSize - PinIconSize) * .5f);
@@ -70,7 +71,7 @@ namespace Kingfisher.KClipboard
 
         private static readonly Color PinnedIconColor = Greyscale(1f);
         private static readonly Color UnpinnedIconColor = Greyscale(1f, UnpinnedIconAlpha);
-        private static readonly float ActionsWidth = (ActionButtonSize + ActionGap) * ActionButtonCount;
+        private static readonly float ActionsWidth = ActionButtonSize * ActionButtonCount + ActionButtonGap * (ActionButtonCount - 1);
 
         private static readonly GUIContent NoSelectionHintContent = new(NoSelectionHint);
         private static readonly GUIContent EmptyTitleContent = new(EmptyTitle);
@@ -299,8 +300,8 @@ namespace Kingfisher.KClipboard
         private void DrawActionButtons(Rect rowRect, KClipboardData.HistoryEntry entry, int index)
         {
             var slideOffset = ActionsWidth * (1f - this._actionsAmount);
-            var deleteRect = new Rect(rowRect.xMax - Padding - ActionButtonSize + slideOffset, rowRect.y, ActionButtonSize, ActionButtonSize);
-            var pasteRect = new Rect(deleteRect.x - ActionGap - ActionButtonSize, rowRect.y, ActionButtonSize, ActionButtonSize);
+            var deleteRect = new Rect(rowRect.xMax - ActionButtonSize + slideOffset, rowRect.y, ActionButtonSize, ActionButtonSize);
+            var pasteRect = new Rect(deleteRect.x - ActionButtonGap - ActionButtonSize, rowRect.y, ActionButtonSize, ActionButtonSize);
 
             SetGUIEnabled(this._hasSelection);
 
