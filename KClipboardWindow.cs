@@ -24,13 +24,11 @@ namespace Kingfisher.KClipboard
         private const string EvenRowStyleName = "CN EntryBackEven";
         private const string OddRowStyleName = "CN EntryBackOdd";
 
-        private const string MoreIconName = "Ellipsis";
         private const string PinnedIconName = "pinned";
         private const string UnpinnedIconName = "pin";
         private const string PasteIconName = "Clipboard";
         private const string DeleteIconName = "TreeEditor.Trash";
 
-        private const string MoreTooltip = "Show actions";
         private const string PinnedTooltip = "Pinned - kept when the history is trimmed or cleared";
         private const string UnpinnedTooltip = "Pin so this entry survives trimming and Clear history";
         private const string PasteTooltip = "Paste these values onto the selected GameObjects";
@@ -42,7 +40,7 @@ namespace Kingfisher.KClipboard
         private const string DaysAgoFormat = "{0}d ago";
 
         private const int NoIndex = -1;
-        private const int ActionButtonCount = 2;
+        private const int ActionButtonCount = 3;
 
         private const double TimeLabelRefreshInterval = 1d;
 
@@ -56,7 +54,7 @@ namespace Kingfisher.KClipboard
         private const float Padding = 4f;
         private const float RowPadding = 8f;
         private const float TitleTimeGap = 2f;
-        private const float IconButtonSize = 16f;
+
         private const float ActionGap = 4f;
 
         private static readonly float RowHeight = RowPadding * 2f + EditorGUIUtility.singleLineHeight * 2f + TitleTimeGap;
@@ -71,7 +69,6 @@ namespace Kingfisher.KClipboard
         private static GUIStyle _evenRowStyle;
         private static GUIStyle _oddRowStyle;
         private static GUIStyle _actionButtonStyle;
-        private static GUIContent _moreIconContent;
         private static GUIContent _pinnedIconContent;
         private static GUIContent _unpinnedIconContent;
         private static GUIContent _pasteIconContent;
@@ -82,9 +79,10 @@ namespace Kingfisher.KClipboard
         private readonly List<string> _timeLabels = new();
 
         private Vector2 _scroll;
-        private int _openActionsIndex = NoIndex;
+        private int _hoveredIndex = NoIndex;
         private int _animatedActionsIndex = NoIndex;
         private int _pendingRemovalIndex = NoIndex;
+        private int _pendingPinIndex = NoIndex;
         private float _actionsAmount;
         private float _deltaTime;
         private double _lastLayoutTime;
@@ -124,12 +122,9 @@ namespace Kingfisher.KClipboard
 
             EditorGUILayout.EndScrollView();
 
-            CloseActionsOnOutsideClick();
             ApplyPendingRemoval();
-
-            if (!CurEvent.IsMouseMove) return;
-
-            Repaint();
+            ApplyPendingPin();
+            RepaintOnHoverChange();
         }
 
         private void OnSelectionChange()
@@ -154,11 +149,7 @@ namespace Kingfisher.KClipboard
             SetGUIEnabled(KClipboard.EnsureData().HasUnpinned());
 
             if (GUILayout.Button(ClearButtonContent, EditorStyles.toolbarButton))
-            {
                 KClipboard.ClearHistory();
-
-                SetOpenActions(NoIndex);
-            }
 
             ResetGUIEnabled();
 
@@ -179,6 +170,9 @@ namespace Kingfisher.KClipboard
 
         private void DrawRows()
         {
+            if (CurEvent.IsRepaint)
+                this._hoveredIndex = NoIndex;
+
             var entries = Entries;
 
             if (entries.Count == 0)
@@ -198,6 +192,9 @@ namespace Kingfisher.KClipboard
 
             DrawZebraBackground(rowRect, index);
 
+            if (CurEvent.IsRepaint && rowRect.IsHovered())
+                this._hoveredIndex = index;
+
             var contentRect = new Rect(rowRect.x + Padding, rowRect.y + RowPadding, rowRect.width - Padding * 2f, rowRect.height - RowPadding * 2f);
             var isAnimated = index == this._animatedActionsIndex && this._actionsAmount > 0f;
 
@@ -206,7 +203,7 @@ namespace Kingfisher.KClipboard
 
             if (contentRect.width <= 0f) return;
 
-            DrawEntry(contentRect, entry, timeLabel, index, this._openActionsIndex == index);
+            DrawEntry(contentRect, entry, timeLabel);
 
             if (!isAnimated) return;
 
@@ -222,33 +219,11 @@ namespace Kingfisher.KClipboard
             style?.Draw(rowRect, false, false, false, false);
         }
 
-        private void DrawEntry(Rect contentRect, KClipboardData.HistoryEntry entry, string timeLabel, int index, bool isOpen)
+        private static void DrawEntry(Rect contentRect, KClipboardData.HistoryEntry entry, string timeLabel)
         {
-            var moreRect = new Rect(contentRect.xMax - IconButtonSize, contentRect.y, IconButtonSize, IconButtonSize);
-            var pinRect = new Rect(moreRect.x, contentRect.yMax - IconButtonSize, IconButtonSize, IconButtonSize);
-            var labelWidth = moreRect.x - ActionGap - contentRect.x;
+            GUI.Label(new Rect(contentRect.x, contentRect.y, contentRect.width, EditorGUIUtility.singleLineHeight), entry.componentTypeLabel);
 
-            if (labelWidth > 0f)
-            {
-                GUI.Label(new Rect(contentRect.x, contentRect.y, labelWidth, EditorGUIUtility.singleLineHeight), entry.componentTypeLabel);
-
-                DrawTimeLabel(new Rect(contentRect.x, contentRect.yMax - EditorGUIUtility.singleLineHeight, labelWidth, EditorGUIUtility.singleLineHeight), timeLabel);
-            }
-
-            DrawPinToggle(pinRect, entry, index);
-
-            if (!GUI.Button(moreRect, _moreIconContent, EditorStyles.iconButton)) return;
-
-            SetOpenActions(isOpen ? NoIndex : index);
-        }
-
-        private static void DrawPinToggle(Rect rect, KClipboardData.HistoryEntry entry, int index)
-        {
-            var isPinned = GUI.Toggle(rect, entry.pinned, entry.pinned ? _pinnedIconContent : _unpinnedIconContent, EditorStyles.iconButton);
-
-            if (isPinned == entry.pinned) return;
-
-            KClipboard.SetPinned(index, isPinned);
+            DrawTimeLabel(new Rect(contentRect.x, contentRect.yMax - EditorGUIUtility.singleLineHeight, contentRect.width, EditorGUIUtility.singleLineHeight), timeLabel);
         }
 
         private static void DrawTimeLabel(Rect rect, string timeLabel)
@@ -264,7 +239,8 @@ namespace Kingfisher.KClipboard
         {
             var slideOffset = ActionsWidth * (1f - this._actionsAmount);
             var deleteRect = new Rect(rowRect.xMax - Padding - ActionButtonSize + slideOffset, rowRect.y, ActionButtonSize, ActionButtonSize);
-            var pasteRect = new Rect(deleteRect.x - ActionGap - ActionButtonSize, rowRect.y, ActionButtonSize, ActionButtonSize);
+            var pinRect = new Rect(deleteRect.x - ActionGap - ActionButtonSize, rowRect.y, ActionButtonSize, ActionButtonSize);
+            var pasteRect = new Rect(pinRect.x - ActionGap - ActionButtonSize, rowRect.y, ActionButtonSize, ActionButtonSize);
 
             SetGUIEnabled(this._hasSelection);
 
@@ -273,17 +249,20 @@ namespace Kingfisher.KClipboard
             ResetGUIEnabled();
 
             if (wasPasteClicked)
-            {
                 PasteEntry(entry);
 
-                SetOpenActions(NoIndex);
-            }
+            DrawPinToggle(pinRect, entry, index);
 
             if (!GUI.Button(deleteRect, _deleteIconContent, _actionButtonStyle)) return;
 
             this._pendingRemovalIndex = index;
+        }
 
-            SetOpenActions(NoIndex);
+        private void DrawPinToggle(Rect rect, KClipboardData.HistoryEntry entry, int index)
+        {
+            if (GUI.Toggle(rect, entry.pinned, entry.pinned ? _pinnedIconContent : _unpinnedIconContent, _actionButtonStyle) == entry.pinned) return;
+
+            this._pendingPinIndex = index;
         }
 
         #endregion
@@ -297,6 +276,19 @@ namespace Kingfisher.KClipboard
             Debug.LogError(string.Format(PasteFailureLogFormat, message));
         }
 
+        private void ApplyPendingPin()
+        {
+            if (this._pendingPinIndex == NoIndex) return;
+
+            KClipboard.TogglePinned(this._pendingPinIndex);
+
+            this._pendingPinIndex = NoIndex;
+
+            this._timeLabels.Clear();
+
+            Repaint();
+        }
+
         private void ApplyPendingRemoval()
         {
             if (this._pendingRemovalIndex == NoIndex) return;
@@ -304,24 +296,6 @@ namespace Kingfisher.KClipboard
             KClipboard.RemoveEntry(this._pendingRemovalIndex);
 
             this._pendingRemovalIndex = NoIndex;
-
-            Repaint();
-        }
-
-        private void CloseActionsOnOutsideClick()
-        {
-            if (this._openActionsIndex == NoIndex) return;
-            if (!CurEvent.IsMouseDown) return;
-
-            SetOpenActions(NoIndex);
-        }
-
-
-        private void SetOpenActions(int index)
-        {
-            if (this._openActionsIndex == index) return;
-
-            this._openActionsIndex = index;
 
             Repaint();
         }
@@ -336,15 +310,15 @@ namespace Kingfisher.KClipboard
 
             UpdateDeltaTime();
 
-            if (this._openActionsIndex != NoIndex && this._openActionsIndex != this._animatedActionsIndex)
+            if (this._hoveredIndex != NoIndex && this._hoveredIndex != this._animatedActionsIndex)
             {
-                this._animatedActionsIndex = this._openActionsIndex;
+                this._animatedActionsIndex = this._hoveredIndex;
                 this._actionsAmount = 0f;
             }
 
             if (this._animatedActionsIndex == NoIndex) return;
 
-            var target = this._animatedActionsIndex == this._openActionsIndex ? 1f : 0f;
+            var target = this._animatedActionsIndex == this._hoveredIndex ? 1f : 0f;
 
             if (this._actionsAmount == target)
             {
@@ -358,6 +332,14 @@ namespace Kingfisher.KClipboard
 
             if (Mathf.Abs(target - this._actionsAmount) < ActionsSnapAmount)
                 this._actionsAmount = target;
+
+            Repaint();
+        }
+
+        private void RepaintOnHoverChange()
+        {
+            if (CurEvent.IsNull) return;
+            if (!CurEvent.IsMouseMove && CurEvent.Type != EventType.MouseLeaveWindow) return;
 
             Repaint();
         }
@@ -381,8 +363,6 @@ namespace Kingfisher.KClipboard
 
             if (this._timeLabels.Count == entries.Count && EditorApplication.timeSinceStartup < this._nextTimeLabelRefresh) return;
 
-            if (this._timeLabels.Count != entries.Count)
-                SetOpenActions(NoIndex);
 
             this._nextTimeLabelRefresh = EditorApplication.timeSinceStartup + TimeLabelRefreshInterval;
 
@@ -419,7 +399,6 @@ namespace Kingfisher.KClipboard
 
             _actionButtonStyle = new GUIStyle(GUI.skin.button) { alignment = TextAnchor.MiddleCenter, fixedHeight = 0f, fixedWidth = 0f };
 
-            _moreIconContent = new GUIContent(EditorIcons.GetTexture(MoreIconName), MoreTooltip);
             _pinnedIconContent = new GUIContent(EditorIcons.GetTexture(PinnedIconName), PinnedTooltip);
             _unpinnedIconContent = new GUIContent(EditorIcons.GetTexture(UnpinnedIconName), UnpinnedTooltip);
             _pasteIconContent = new GUIContent(EditorIcons.GetTexture(PasteIconName), PasteTooltip);

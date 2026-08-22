@@ -175,9 +175,9 @@ namespace Kingfisher.KClipboard
             Libs.KData.Flush();
         }
 
-        public static void SetPinned(int index, bool isPinned)
+        public static void TogglePinned(int index)
         {
-            EnsureData().SetPinned(index, isPinned);
+            EnsureData().TogglePinned(index);
 
             Libs.KData.Flush();
         }

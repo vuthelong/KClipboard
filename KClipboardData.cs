@@ -16,11 +16,11 @@ namespace Kingfisher.KClipboard
 
         #endregion
 
-        #region Method
+        #region Entry
 
         public void Push(string componentTypeName, string componentTypeLabel, string json, int maxCount)
         {
-            this.entries.Insert(0, new HistoryEntry
+            this.entries.Insert(GetPinnedCount(), new HistoryEntry
             {
                 componentTypeName = componentTypeName,
                 componentTypeLabel = componentTypeLabel,
@@ -40,17 +40,19 @@ namespace Kingfisher.KClipboard
             this.Dirty();
         }
 
-        public void SetPinned(int index, bool isPinned)
+        public void TogglePinned(int index)
         {
             if (!index.IsInRangeOf(this.entries)) return;
-            if (this.entries[index].pinned == isPinned) return;
 
-            this.entries[index].pinned = isPinned;
+            var entry = this.entries[index];
+
+            entry.pinned = !entry.pinned;
+
+            this.entries.RemoveAt(index);
+            this.entries.Insert(GetSortedIndex(entry), entry);
 
             this.Dirty();
         }
-
-        public bool HasUnpinned() => GetLastUnpinnedIndex() != NoIndex;
 
         public void RemoveAt(int index)
         {
@@ -71,6 +73,40 @@ namespace Kingfisher.KClipboard
             }
 
             this.Dirty();
+        }
+
+        #endregion
+
+        #region Order
+
+        public bool HasUnpinned() => GetLastUnpinnedIndex() != NoIndex;
+
+        private int GetPinnedCount()
+        {
+            for (var i = 0; i < this.entries.Count; i++)
+            {
+                if (this.entries[i].pinned) continue;
+
+                return i;
+            }
+
+            return this.entries.Count;
+        }
+
+        private int GetSortedIndex(HistoryEntry entry)
+        {
+            var pinnedCount = GetPinnedCount();
+
+            if (entry.pinned) return pinnedCount;
+
+            for (var i = pinnedCount; i < this.entries.Count; i++)
+            {
+                if (this.entries[i].timestampTicks > entry.timestampTicks) continue;
+
+                return i;
+            }
+
+            return this.entries.Count;
         }
 
         private int GetLastUnpinnedIndex()
