@@ -17,15 +17,38 @@ combined settings window.
   copy its values (via `UnityEditorInternal.ComponentUtility` and
   `EditorJsonUtility`) and push them onto a persisted history stack
 - **Tools > Kingfisher > K-Clipboard > History** lists the stack, most recent
-  first, with a **Paste to Selected** button per entry
-- Paste applies to every currently selected GameObject - values overwrite a
-  matching component when the GameObject already has one, and the component is
-  added first when it does not
+  first, each entry showing the component type and how long ago it was copied
+- Hover an entry to slide out its **paste** and **delete** buttons - paste
+  applies to every currently selected GameObject, and stays disabled while
+  nothing is selected
+- Values overwrite a matching component when the GameObject already has one,
+  and the component is added first when it does not
+- **Pin** an entry to keep it above the rest - pinned entries sort to the top
+  in the order you pinned them, and survive both the history cap and
+  **Clear history**
+- Select an entry to open a resizable preview pane that draws the stored values
+  as a real Inspector - edit them in place and press **Save** to write them
+  back into the entry
+- **Copy** in that pane pushes the entry into Unity's own component clipboard,
+  so **Paste Component Values** and **Paste Component As New** pick it up
 - Configurable history cap (default 20 entries)
-- **Clear history** button to wipe the stack
+- **Clear history** button to wipe every unpinned entry
 
 Everything is editor-only - the assembly is `Editor`-platform only, so nothing
 here is compiled into player builds.
+
+## Limitations
+
+> [!NOTE]
+> Paste targets **one** component per selected GameObject. When a GameObject
+> already has several components of the copied type, the values land on the
+> first one in Inspector order and the rest are left untouched - there is no
+> way to aim at a specific duplicate. When it has none, the component is added
+> first and then filled.
+>
+> This also means paste never adds a second instance to a GameObject that
+> already has one. Use Unity's own **Paste Component As New** when you want
+> another copy alongside the existing ones.
 
 ## Install
 
