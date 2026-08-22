@@ -97,7 +97,7 @@ namespace Kingfisher.KClipboard
         private static readonly Color RowOddColorLight = Greyscale(.85f);
         private static readonly Color PinnedIconColor = Greyscale(1f);
         private static readonly Color UnpinnedIconColor = Greyscale(1f, UnpinnedIconAlpha);
-        private static readonly float ActionsWidth = ActionButtonSize * ActionButtonCount + ActionButtonGap * (ActionButtonCount - 1);
+        private static readonly float ActionsWidth = (ActionButtonSize + ActionButtonGap) * ActionButtonCount;
 
         private static readonly GUIContent NoSelectionHintContent = new(NoSelectionHint);
         private static readonly GUIContent EmptyTitleContent = new(EmptyTitle);
@@ -326,14 +326,14 @@ namespace Kingfisher.KClipboard
         private void DrawRow(KClipboardData.HistoryEntry entry, string timeLabel, int index)
         {
             var rowRect = GUILayoutUtility.GetRect(0f, RowHeight, ExpandWidthOptions);
+            var actionsAmount = index == this._animatedActionsIndex ? this._actionsAmount : 0f;
 
-            DrawRowBackground(rowRect, index, entry == this._selectedEntry);
+            DrawRowBackground(rowRect, index, entry == this._selectedEntry, actionsAmount);
 
             if (CurEvent.IsRepaint && this._isMouseOverList && rowRect.IsHovered())
                 this._hoveredIndex = index;
 
             var contentRect = new Rect(rowRect.x + Padding, rowRect.y + RowPadding, rowRect.width - Padding * 2f, rowRect.height - RowPadding * 2f);
-            var actionsAmount = index == this._animatedActionsIndex ? this._actionsAmount : 0f;
 
             contentRect.width -= ActionsWidth * actionsAmount;
 
@@ -342,7 +342,7 @@ namespace Kingfisher.KClipboard
             HandleRowClick(rowRect, entry);
         }
 
-        private static void DrawRowBackground(Rect rowRect, int index, bool isSelected)
+        private static void DrawRowBackground(Rect rowRect, int index, bool isSelected, float actionsAmount)
         {
             if (!CurEvent.IsRepaint) return;
 
@@ -350,7 +350,13 @@ namespace Kingfisher.KClipboard
 
             if (!isSelected) return;
 
-            _selectedRowStyle?.Draw(rowRect, false, false, true, true);
+            var highlightRect = rowRect;
+
+            highlightRect.width -= (ActionsWidth + ActionButtonGap) * actionsAmount;
+
+            if (highlightRect.width <= 0f) return;
+
+            _selectedRowStyle?.Draw(highlightRect, false, false, true, true);
         }
 
         private void DrawEntry(Rect contentRect, KClipboardData.HistoryEntry entry, string timeLabel, int index)
@@ -390,7 +396,7 @@ namespace Kingfisher.KClipboard
         private void DrawActionButtons(Rect rowRect, KClipboardData.HistoryEntry entry, int index, float amount)
         {
             var slideOffset = ActionsWidth * (1f - amount);
-            var deleteRect = new Rect(rowRect.xMax - ActionButtonSize + slideOffset, rowRect.y, ActionButtonSize, ActionButtonSize);
+            var deleteRect = new Rect(rowRect.xMax - ActionButtonGap - ActionButtonSize + slideOffset, rowRect.y, ActionButtonSize, ActionButtonSize);
             var pasteRect = new Rect(deleteRect.x - ActionButtonGap - ActionButtonSize, rowRect.y, ActionButtonSize, ActionButtonSize);
 
             SetGUIEnabled(this._hasSelection);
