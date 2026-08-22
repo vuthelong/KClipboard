@@ -32,7 +32,6 @@ namespace Kingfisher.KClipboard
         private const string LayoutFieldName = "SettingsLayout";
         private const string DeleteDataMethodName = "DeleteData";
         private const string OpenToolMethodName = "OpenTool";
-        private const string DataPathPropertyName = "DataPath";
         private const string KeyPrefixFieldName = "KeyPrefix";
         private const string KeyFieldSuffix = "Key";
 
@@ -69,22 +68,9 @@ namespace Kingfisher.KClipboard
         private const int LegacyKeyOffset = 1;
 
         private const char PathSeparator = '/';
-        private const char WindowsPathSeparator = '\\';
         private const string DataFolderName = ".KData";
         private const string AssetsFolderMarker = "/Assets";
 
-        private const string DeleteDataTitleFormat = "Delete {0} data?";
-        private const string DeleteDataEmptyBodyFormat = "{0} has nothing saved in {1} right now.\n\nIts in-memory copy will still be cleared.";
-        private const string DeleteDataBodyFormat = "This permanently deletes:\n\n{0}\n\nfrom {1}. It cannot be undone.";
-        private const string ResetSettingsTitleFormat = "Reset {0} settings?";
-
-        private const string ResetSettingsBodyFormat = "This puts every {0} setting back to its default.\n\n" +
-                                                       "Saved data in .KData is left alone. Settings are stored per project and per machine, so both copies are cleared, and scripts will reload.";
-
-        private const string FileSeparator = "\n";
-        private const string DeleteConfirmLabel = "Delete";
-        private const string ResetConfirmLabel = "Reset";
-        private const string CancelLabel = "Cancel";
         private const string BreadcrumbRoot = "Tools  ›";
 
         private const float MinWindowWidth = 400f;
@@ -163,7 +149,6 @@ namespace Kingfisher.KClipboard
 
         private static readonly GUILayoutOption[] ExpandWidthOptions = { GUILayout.ExpandWidth(true) };
         private static readonly Dictionary<string, (GUIContent Content, float Width, int StylesVersion)> SectionTitleContents = new();
-        private static readonly List<string> StoredDataFiles = new();
         private static readonly List<SettingsSection> Sections = new();
 
         private static Color _previousContentColor;
@@ -185,7 +170,6 @@ namespace Kingfisher.KClipboard
         private static SettingsSetting _disabledSetting;
         private static MethodInfo _deleteDataMethod;
         private static MethodInfo _openToolMethod;
-        private static PropertyInfo _dataPathProperty;
         private static string _sharedDataFolderPath;
 
         private Vector2 _scroll;
@@ -491,7 +475,7 @@ namespace Kingfisher.KClipboard
 
                 if (GUI.Button(deleteRect, DeleteDataButtonContent, _dangerButtonStyle))
                 {
-                    ConfirmDeleteData();
+                    DeleteData();
                 }
 
                 GUI.backgroundColor = previousBackground;
@@ -503,7 +487,7 @@ namespace Kingfisher.KClipboard
 
             if (GUI.Button(resetRect, ResetButtonContent, _buttonStyle))
             {
-                ConfirmResetSettings();
+                ResetSettings();
             }
 
             if (!CanOpenTool) return resetRect.x;
@@ -637,7 +621,6 @@ namespace Kingfisher.KClipboard
 
             _deleteDataMethod = menuType.GetMethod(DeleteDataMethodName, StaticMemberFlags, null, Type.EmptyTypes, null);
             _openToolMethod = menuType.GetMethod(OpenToolMethodName, StaticMemberFlags, null, Type.EmptyTypes, null);
-            _dataPathProperty = menuType.GetProperty(DataPathPropertyName, StaticMemberFlags);
             _sharedDataFolderPath = GetSharedDataFolderPath();
 
             var propertiesByName = new Dictionary<string, PropertyInfo>();
@@ -854,20 +837,10 @@ namespace Kingfisher.KClipboard
 
         #endregion
 
-        #region Confirmation Dialog
+        #region Tool Action
 
-        private void ConfirmDeleteData()
+        private void DeleteData()
         {
-            CollectStoredDataFiles();
-
-            var folder = GetDisplayDataFolder();
-
-            var body = StoredDataFiles.Count == 0
-                ? string.Format(DeleteDataEmptyBodyFormat, WindowTitle, folder)
-                : string.Format(DeleteDataBodyFormat, string.Join(FileSeparator, StoredDataFiles), folder);
-
-            if (!EditorUtility.DisplayDialog(string.Format(DeleteDataTitleFormat, WindowTitle), body, DeleteConfirmLabel, CancelLabel)) return;
-
             EditorApplication.delayCall += () =>
             {
                 _deleteDataMethod?.Invoke(null, null);
@@ -878,12 +851,8 @@ namespace Kingfisher.KClipboard
             };
         }
 
-        private static void ConfirmResetSettings()
+        private static void ResetSettings()
         {
-            var body = string.Format(ResetSettingsBodyFormat, WindowTitle);
-
-            if (!EditorUtility.DisplayDialog(string.Format(ResetSettingsTitleFormat, WindowTitle), body, ResetConfirmLabel, CancelLabel)) return;
-
             EditorApplication.delayCall += () =>
             {
                 ResetStoredKeys();
@@ -893,44 +862,6 @@ namespace Kingfisher.KClipboard
         }
 
         private static void InvokeOpenTool() => _openToolMethod?.Invoke(null, null);
-
-        private static string GetDisplayDataFolder()
-        {
-            if (_dataPathProperty?.GetValue(null) is string path)
-            {
-                return Path.GetDirectoryName(path)?.Replace(WindowsPathSeparator, PathSeparator) ?? DataFolderName;
-            }
-
-            return DataFolderName;
-        }
-
-        private static void CollectStoredDataFiles()
-        {
-            StoredDataFiles.Clear();
-
-            if (_dataPathProperty?.GetValue(null) is string path)
-            {
-                if (File.Exists(path))
-                {
-                    StoredDataFiles.Add(Path.GetFileName(path));
-                }
-
-                return;
-            }
-
-            if (!Directory.Exists(_sharedDataFolderPath)) return;
-
-            var filePaths = Directory.GetFiles(_sharedDataFolderPath);
-
-            for (var i = 0; i < filePaths.Length; i++)
-            {
-                var fileName = Path.GetFileName(filePaths[i]);
-
-                if (!fileName.StartsWith(WindowTitle, StringComparison.Ordinal)) continue;
-
-                StoredDataFiles.Add(fileName);
-            }
-        }
 
         #endregion
 

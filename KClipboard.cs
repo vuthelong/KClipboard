@@ -168,6 +168,20 @@ namespace Kingfisher.KClipboard
             Data = null;
         }
 
+        public static void RemoveEntry(int index)
+        {
+            EnsureData().RemoveAt(index);
+
+            Libs.KData.Flush();
+        }
+
+        public static void SetPinned(int index, bool isPinned)
+        {
+            EnsureData().SetPinned(index, isPinned);
+
+            Libs.KData.Flush();
+        }
+
         public static void ClearHistory()
         {
             EnsureData().Clear();

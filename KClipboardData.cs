@@ -10,6 +10,8 @@ namespace Kingfisher.KClipboard
     {
         #region Field
 
+        private const int NoIndex = -1;
+
         public List<HistoryEntry> entries = new();
 
         #endregion
@@ -27,16 +29,60 @@ namespace Kingfisher.KClipboard
             });
 
             while (this.entries.Count > maxCount.Max(0))
-                this.entries.RemoveLast();
+            {
+                var trimIndex = GetLastUnpinnedIndex();
+
+                if (trimIndex == NoIndex) break;
+
+                this.entries.RemoveAt(trimIndex);
+            }
+
+            this.Dirty();
+        }
+
+        public void SetPinned(int index, bool isPinned)
+        {
+            if (!index.IsInRangeOf(this.entries)) return;
+            if (this.entries[index].pinned == isPinned) return;
+
+            this.entries[index].pinned = isPinned;
+
+            this.Dirty();
+        }
+
+        public bool HasUnpinned() => GetLastUnpinnedIndex() != NoIndex;
+
+        public void RemoveAt(int index)
+        {
+            if (!index.IsInRangeOf(this.entries)) return;
+
+            this.entries.RemoveAt(index);
 
             this.Dirty();
         }
 
         public void Clear()
         {
-            this.entries.Clear();
+            for (var i = this.entries.Count - 1; i >= 0; i--)
+            {
+                if (this.entries[i].pinned) continue;
+
+                this.entries.RemoveAt(i);
+            }
 
             this.Dirty();
+        }
+
+        private int GetLastUnpinnedIndex()
+        {
+            for (var i = this.entries.Count - 1; i >= 0; i--)
+            {
+                if (this.entries[i].pinned) continue;
+
+                return i;
+            }
+
+            return NoIndex;
         }
 
         #endregion
@@ -50,6 +96,7 @@ namespace Kingfisher.KClipboard
             public string componentTypeLabel;
             public string json;
             public long timestampTicks;
+            public bool pinned;
         }
 
         #endregion

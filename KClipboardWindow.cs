@@ -1,7 +1,10 @@
 #if UNITY_EDITOR
 using System;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
+using static Kingfisher.KClipboard.Libs.KUtils;
+using static Kingfisher.KClipboard.Libs.KGUI;
 
 namespace Kingfisher.KClipboard
 {
@@ -13,38 +16,170 @@ namespace Kingfisher.KClipboard
         private const string WindowTitle = "K-Clipboard History";
         private const int MenuPriority = 912;
 
-        private const string ClearHistoryTitle = "Clear K-Clipboard history?";
-        private const string ClearHistoryBody = "This permanently removes every copied component from the history stack. It cannot be undone.";
-        private const string ClearConfirmLabel = "Clear";
-        private const string CancelLabel = "Cancel";
-        private const string OkLabel = "OK";
-
         private const string EmptyHistoryLabel = "Nothing copied yet. Right-click a component and choose \"Copy to K-Clipboard History\".";
-        private const string PasteButtonLabel = "Paste to Selected";
-        private const string ClearHistoryButtonLabel = "Clear history";
+        private const string NoSelectionHint = "Select GameObjects to paste into.";
+
+        private const string PasteFailureLogFormat = "K-Clipboard: {0}";
+
+        private const string EvenRowStyleName = "CN EntryBackEven";
+        private const string OddRowStyleName = "CN EntryBackOdd";
+
+        private const string MoreIconName = "Ellipsis";
+        private const string PinnedIconName = "pinned";
+        private const string UnpinnedIconName = "pin";
+        private const string PasteIconName = "Clipboard";
+        private const string DeleteIconName = "TreeEditor.Trash";
+
+        private const string MoreTooltip = "Show actions";
+        private const string PinnedTooltip = "Pinned - kept when the history is trimmed or cleared";
+        private const string UnpinnedTooltip = "Pin so this entry survives trimming and Clear history";
+        private const string PasteTooltip = "Paste these values onto the selected GameObjects";
+        private const string DeleteTooltip = "Remove from history";
 
         private const string JustNowLabel = "just now";
         private const string MinutesAgoFormat = "{0}m ago";
         private const string HoursAgoFormat = "{0}h ago";
         private const string DaysAgoFormat = "{0}d ago";
 
-        private const float PasteButtonWidth = 130f;
+        private const int NoIndex = -1;
+        private const int ActionButtonCount = 2;
+
+        private const double TimeLabelRefreshInterval = 1d;
+
+        private const float ActionsLerpSpeed = 12f;
+        private const float ActionsSnapAmount = .005f;
+        private const float MaxDeltaTime = .05f;
+        private const float FallbackDeltaTime = .0166f;
+
         private const float MinWindowWidth = 360f;
         private const float MinWindowHeight = 240f;
+        private const float Padding = 4f;
+        private const float RowPadding = 8f;
+        private const float TitleTimeGap = 2f;
+        private const float IconButtonSize = 16f;
+        private const float ActionGap = 4f;
+
+        private static readonly float RowHeight = RowPadding * 2f + EditorGUIUtility.singleLineHeight * 2f + TitleTimeGap;
+        private static readonly float ActionButtonSize = RowHeight;
+        private static readonly float ActionsWidth = (ActionButtonSize + ActionGap) * ActionButtonCount;
+
+        private static readonly GUIContent NoSelectionHintContent = new(NoSelectionHint);
+        private static readonly GUIContent ClearButtonContent = new("Clear history");
+
+        private static readonly GUILayoutOption[] ExpandWidthOptions = { GUILayout.ExpandWidth(true) };
+
+        private static GUIStyle _evenRowStyle;
+        private static GUIStyle _oddRowStyle;
+        private static GUIStyle _actionButtonStyle;
+        private static GUIContent _moreIconContent;
+        private static GUIContent _pinnedIconContent;
+        private static GUIContent _unpinnedIconContent;
+        private static GUIContent _pasteIconContent;
+        private static GUIContent _deleteIconContent;
+        private static bool _hasBuiltStyles;
+        private static bool _isStyleDark;
+
+        private readonly List<string> _timeLabels = new();
 
         private Vector2 _scroll;
+        private int _openActionsIndex = NoIndex;
+        private int _animatedActionsIndex = NoIndex;
+        private int _pendingRemovalIndex = NoIndex;
+        private float _actionsAmount;
+        private float _deltaTime;
+        private double _lastLayoutTime;
+        private double _nextTimeLabelRefresh;
+        private bool _hasSelection;
+
+        #endregion
+
+        #region Property
+
+        private static List<KClipboardData.HistoryEntry> Entries => KClipboard.EnsureData().entries;
 
         #endregion
 
         #region Unity Lifecycle
 
-        private void OnEnable() => KClipboard.EnsureData();
+        private void OnEnable()
+        {
+            KClipboard.EnsureData();
+
+            wantsMouseMove = true;
+
+            this._hasSelection = Selection.gameObjects.Length > 0;
+        }
 
         private void OnGUI()
         {
+            BuildStyles();
+            RefreshTimeLabels();
+            UpdateActionsAnimation();
+
             DrawToolbar();
 
-            var entries = KClipboard.EnsureData().entries;
+            this._scroll = EditorGUILayout.BeginScrollView(this._scroll);
+
+            DrawRows();
+
+            EditorGUILayout.EndScrollView();
+
+            CloseActionsOnOutsideClick();
+            ApplyPendingRemoval();
+
+            if (!CurEvent.IsMouseMove) return;
+
+            Repaint();
+        }
+
+        private void OnSelectionChange()
+        {
+            this._hasSelection = Selection.gameObjects.Length > 0;
+
+            Repaint();
+        }
+
+        #endregion
+
+        #region Drawing
+
+        private void DrawToolbar()
+        {
+            EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
+
+            DrawSelectionHint();
+
+            GUILayout.FlexibleSpace();
+
+            SetGUIEnabled(KClipboard.EnsureData().HasUnpinned());
+
+            if (GUILayout.Button(ClearButtonContent, EditorStyles.toolbarButton))
+            {
+                KClipboard.ClearHistory();
+
+                SetOpenActions(NoIndex);
+            }
+
+            ResetGUIEnabled();
+
+            EditorGUILayout.EndHorizontal();
+        }
+
+        private void DrawSelectionHint()
+        {
+            if (this._hasSelection) return;
+            if (Entries.Count == 0) return;
+
+            SetGUIEnabled(false);
+
+            GUILayout.Label(NoSelectionHintContent, EditorStyles.miniLabel);
+
+            ResetGUIEnabled();
+        }
+
+        private void DrawRows()
+        {
+            var entries = Entries;
 
             if (entries.Count == 0)
             {
@@ -53,73 +188,208 @@ namespace Kingfisher.KClipboard
                 return;
             }
 
-            this._scroll = EditorGUILayout.BeginScrollView(this._scroll);
-
             for (var i = 0; i < entries.Count; i++)
-                DrawRow(entries[i]);
-
-            EditorGUILayout.EndScrollView();
+                DrawRow(entries[i], this._timeLabels[i], i);
         }
 
-        #endregion
-
-        #region Drawing
-
-        private static void DrawToolbar()
+        private void DrawRow(KClipboardData.HistoryEntry entry, string timeLabel, int index)
         {
-            EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
+            var rowRect = GUILayoutUtility.GetRect(0f, RowHeight, ExpandWidthOptions);
 
-            GUILayout.FlexibleSpace();
+            DrawZebraBackground(rowRect, index);
 
-            EditorGUI.BeginDisabledGroup(KClipboard.EnsureData().entries.Count == 0);
+            var contentRect = new Rect(rowRect.x + Padding, rowRect.y + RowPadding, rowRect.width - Padding * 2f, rowRect.height - RowPadding * 2f);
+            var isAnimated = index == this._animatedActionsIndex && this._actionsAmount > 0f;
 
-            if (GUILayout.Button(ClearHistoryButtonLabel, EditorStyles.toolbarButton))
-                ConfirmClearHistory();
+            if (isAnimated)
+                contentRect.width -= ActionsWidth * this._actionsAmount;
 
-            EditorGUI.EndDisabledGroup();
+            if (contentRect.width <= 0f) return;
 
-            EditorGUILayout.EndHorizontal();
+            DrawEntry(contentRect, entry, timeLabel, index, this._openActionsIndex == index);
+
+            if (!isAnimated) return;
+
+            DrawActionButtons(rowRect, entry, index);
         }
 
-        private static void DrawRow(KClipboardData.HistoryEntry entry)
+        private static void DrawZebraBackground(Rect rowRect, int index)
         {
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUILayout.BeginHorizontal();
+            if (!CurEvent.IsRepaint) return;
 
-            EditorGUILayout.BeginVertical();
-            EditorGUILayout.LabelField(entry.componentTypeLabel, EditorStyles.boldLabel);
-            EditorGUILayout.LabelField(GetRelativeLabel(entry.timestampTicks), EditorStyles.miniLabel);
-            EditorGUILayout.EndVertical();
+            var style = index % 2 == 0 ? _evenRowStyle : _oddRowStyle;
 
-            GUILayout.FlexibleSpace();
+            style?.Draw(rowRect, false, false, false, false);
+        }
 
-            EditorGUI.BeginDisabledGroup(Selection.gameObjects.Length == 0);
+        private void DrawEntry(Rect contentRect, KClipboardData.HistoryEntry entry, string timeLabel, int index, bool isOpen)
+        {
+            var moreRect = new Rect(contentRect.xMax - IconButtonSize, contentRect.y, IconButtonSize, IconButtonSize);
+            var pinRect = new Rect(moreRect.x, contentRect.yMax - IconButtonSize, IconButtonSize, IconButtonSize);
+            var labelWidth = moreRect.x - ActionGap - contentRect.x;
 
-            if (GUILayout.Button(PasteButtonLabel, GUILayout.Width(PasteButtonWidth)))
+            if (labelWidth > 0f)
+            {
+                GUI.Label(new Rect(contentRect.x, contentRect.y, labelWidth, EditorGUIUtility.singleLineHeight), entry.componentTypeLabel);
+
+                DrawTimeLabel(new Rect(contentRect.x, contentRect.yMax - EditorGUIUtility.singleLineHeight, labelWidth, EditorGUIUtility.singleLineHeight), timeLabel);
+            }
+
+            DrawPinToggle(pinRect, entry, index);
+
+            if (!GUI.Button(moreRect, _moreIconContent, EditorStyles.iconButton)) return;
+
+            SetOpenActions(isOpen ? NoIndex : index);
+        }
+
+        private static void DrawPinToggle(Rect rect, KClipboardData.HistoryEntry entry, int index)
+        {
+            var isPinned = GUI.Toggle(rect, entry.pinned, entry.pinned ? _pinnedIconContent : _unpinnedIconContent, EditorStyles.iconButton);
+
+            if (isPinned == entry.pinned) return;
+
+            KClipboard.SetPinned(index, isPinned);
+        }
+
+        private static void DrawTimeLabel(Rect rect, string timeLabel)
+        {
+            SetGUIEnabled(false);
+
+            GUI.Label(rect, timeLabel, EditorStyles.miniLabel);
+
+            ResetGUIEnabled();
+        }
+
+        private void DrawActionButtons(Rect rowRect, KClipboardData.HistoryEntry entry, int index)
+        {
+            var slideOffset = ActionsWidth * (1f - this._actionsAmount);
+            var deleteRect = new Rect(rowRect.xMax - Padding - ActionButtonSize + slideOffset, rowRect.y, ActionButtonSize, ActionButtonSize);
+            var pasteRect = new Rect(deleteRect.x - ActionGap - ActionButtonSize, rowRect.y, ActionButtonSize, ActionButtonSize);
+
+            SetGUIEnabled(this._hasSelection);
+
+            var wasPasteClicked = GUI.Button(pasteRect, _pasteIconContent, _actionButtonStyle);
+
+            ResetGUIEnabled();
+
+            if (wasPasteClicked)
+            {
                 PasteEntry(entry);
 
-            EditorGUI.EndDisabledGroup();
+                SetOpenActions(NoIndex);
+            }
 
-            EditorGUILayout.EndHorizontal();
-            EditorGUILayout.EndVertical();
+            if (!GUI.Button(deleteRect, _deleteIconContent, _actionButtonStyle)) return;
+
+            this._pendingRemovalIndex = index;
+
+            SetOpenActions(NoIndex);
         }
 
         #endregion
 
-        #region Actions
+        #region Entry Action
 
         private static void PasteEntry(KClipboardData.HistoryEntry entry)
         {
-            KClipboard.TryPasteToSelected(entry, out var message);
+            if (KClipboard.TryPasteToSelected(entry, out var message)) return;
 
-            EditorUtility.DisplayDialog(WindowTitle, message, OkLabel);
+            Debug.LogError(string.Format(PasteFailureLogFormat, message));
         }
 
-        private static void ConfirmClearHistory()
+        private void ApplyPendingRemoval()
         {
-            if (!EditorUtility.DisplayDialog(ClearHistoryTitle, ClearHistoryBody, ClearConfirmLabel, CancelLabel)) return;
+            if (this._pendingRemovalIndex == NoIndex) return;
 
-            KClipboard.ClearHistory();
+            KClipboard.RemoveEntry(this._pendingRemovalIndex);
+
+            this._pendingRemovalIndex = NoIndex;
+
+            Repaint();
+        }
+
+        private void CloseActionsOnOutsideClick()
+        {
+            if (this._openActionsIndex == NoIndex) return;
+            if (!CurEvent.IsMouseDown) return;
+
+            SetOpenActions(NoIndex);
+        }
+
+
+        private void SetOpenActions(int index)
+        {
+            if (this._openActionsIndex == index) return;
+
+            this._openActionsIndex = index;
+
+            Repaint();
+        }
+
+        #endregion
+
+        #region Animation
+
+        private void UpdateActionsAnimation()
+        {
+            if (!CurEvent.IsLayout) return;
+
+            UpdateDeltaTime();
+
+            if (this._openActionsIndex != NoIndex && this._openActionsIndex != this._animatedActionsIndex)
+            {
+                this._animatedActionsIndex = this._openActionsIndex;
+                this._actionsAmount = 0f;
+            }
+
+            if (this._animatedActionsIndex == NoIndex) return;
+
+            var target = this._animatedActionsIndex == this._openActionsIndex ? 1f : 0f;
+
+            if (this._actionsAmount == target)
+            {
+                if (target == 0f)
+                    this._animatedActionsIndex = NoIndex;
+
+                return;
+            }
+
+            Lerp(ref this._actionsAmount, target, ActionsLerpSpeed, this._deltaTime);
+
+            if (Mathf.Abs(target - this._actionsAmount) < ActionsSnapAmount)
+                this._actionsAmount = target;
+
+            Repaint();
+        }
+
+        private void UpdateDeltaTime()
+        {
+            this._deltaTime = (float)(EditorApplication.timeSinceStartup - this._lastLayoutTime);
+
+            if (this._deltaTime > MaxDeltaTime)
+                this._deltaTime = FallbackDeltaTime;
+
+            this._lastLayoutTime = EditorApplication.timeSinceStartup;
+        }
+        #endregion
+
+        #region Time Label
+
+        private void RefreshTimeLabels()
+        {
+            var entries = Entries;
+
+            if (this._timeLabels.Count == entries.Count && EditorApplication.timeSinceStartup < this._nextTimeLabelRefresh) return;
+
+            if (this._timeLabels.Count != entries.Count)
+                SetOpenActions(NoIndex);
+
+            this._nextTimeLabelRefresh = EditorApplication.timeSinceStartup + TimeLabelRefreshInterval;
+
+            this._timeLabels.Clear();
+
+            for (var i = 0; i < entries.Count; i++)
+                this._timeLabels.Add(GetRelativeLabel(entries[i].timestampTicks));
         }
 
         private static string GetRelativeLabel(long timestampTicks)
@@ -136,6 +406,25 @@ namespace Kingfisher.KClipboard
         #endregion
 
         #region Method
+
+        private static void BuildStyles()
+        {
+            if (_hasBuiltStyles && _isStyleDark == IsDarkTheme) return;
+
+            _hasBuiltStyles = true;
+            _isStyleDark = IsDarkTheme;
+
+            _evenRowStyle = GUI.skin.FindStyle(EvenRowStyleName);
+            _oddRowStyle = GUI.skin.FindStyle(OddRowStyleName);
+
+            _actionButtonStyle = new GUIStyle(GUI.skin.button) { alignment = TextAnchor.MiddleCenter, fixedHeight = 0f, fixedWidth = 0f };
+
+            _moreIconContent = new GUIContent(EditorIcons.GetTexture(MoreIconName), MoreTooltip);
+            _pinnedIconContent = new GUIContent(EditorIcons.GetTexture(PinnedIconName), PinnedTooltip);
+            _unpinnedIconContent = new GUIContent(EditorIcons.GetTexture(UnpinnedIconName), UnpinnedTooltip);
+            _pasteIconContent = new GUIContent(EditorIcons.GetTexture(PasteIconName), PasteTooltip);
+            _deleteIconContent = new GUIContent(EditorIcons.GetTexture(DeleteIconName), DeleteTooltip);
+        }
 
         [MenuItem(MenuPath, false, MenuPriority)]
         public static void Open()
