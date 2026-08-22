@@ -54,6 +54,16 @@ namespace Kingfisher.KClipboard
             this.Dirty();
         }
 
+        public void SetJson(HistoryEntry entry, string json)
+        {
+            if (entry == null) return;
+            if (entry.json == json) return;
+
+            entry.json = json;
+
+            this.Dirty();
+        }
+
         public void RemoveAt(int index)
         {
             if (!index.IsInRangeOf(this.entries)) return;

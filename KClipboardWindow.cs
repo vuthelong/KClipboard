@@ -19,11 +19,16 @@ namespace Kingfisher.KClipboard
         private const string EmptyTitle = "Nothing here";
         private const string EmptyBody = "You will see your copied components here once you have copied something.";
         private const string NoSelectionHint = "Select GameObjects to paste into.";
+        private const string PreviewUnavailable = "This component type is no longer available in the project.";
+        private const string PreviewHeaderLabel = "Preview";
 
         private const string PasteFailureLogFormat = "K-Clipboard: {0}";
 
+        private const string PreviewHostName = "KClipboard Preview";
+
         private const string EvenRowStyleName = "CN EntryBackEven";
         private const string OddRowStyleName = "CN EntryBackOdd";
+        private const string SelectedRowStyleName = "OL SelectedRow";
 
         private const string PinnedIconName = "pinned";
         private const string UnpinnedIconName = "pin";
@@ -41,6 +46,7 @@ namespace Kingfisher.KClipboard
         private const string DaysAgoFormat = "{0}d ago";
 
         private const int NoIndex = -1;
+        private const int LeftMouseButton = 0;
         private const int ActionButtonCount = 2;
 
         private const double TimeLabelRefreshInterval = 1d;
@@ -66,6 +72,14 @@ namespace Kingfisher.KClipboard
         private const float UnpinnedIconAlpha = .5f;
         private const float LabelIndent = PinButtonSize + ActionGap;
 
+        private const float SaveButtonWidth = 48f;
+        private const int PreviewPadding = 6;
+        private const float PreviewLabelWidthRatio = .4f;
+        private const float MinPreviewLabelWidth = 110f;
+        private const float DefaultPreviewHeight = 200f;
+        private const float MinPreviewHeight = 60f;
+        private const float MinListHeight = 60f;
+
         private static readonly float RowHeight = RowPadding * 2f + EditorGUIUtility.singleLineHeight * 2f + TitleTimeGap;
         private static readonly float ActionButtonSize = RowHeight;
 
@@ -76,16 +90,20 @@ namespace Kingfisher.KClipboard
         private static readonly GUIContent NoSelectionHintContent = new(NoSelectionHint);
         private static readonly GUIContent EmptyTitleContent = new(EmptyTitle);
         private static readonly GUIContent EmptyBodyContent = new(EmptyBody);
+        private static readonly GUIContent PreviewUnavailableContent = new(PreviewUnavailable);
+        private static readonly GUIContent PreviewHeaderContent = new(PreviewHeaderLabel);
         private static readonly GUIContent ClearButtonContent = new("Clear history");
+        private static readonly GUIContent SaveButtonContent = new("Save", "Write these values back to the history entry");
 
         private static readonly GUILayoutOption[] ExpandWidthOptions = { GUILayout.ExpandWidth(true) };
-        private static readonly GUILayoutOption[] ExpandOptions = { GUILayout.ExpandWidth(true), GUILayout.ExpandHeight(true) };
 
         private static GUIStyle _evenRowStyle;
         private static GUIStyle _oddRowStyle;
+        private static GUIStyle _selectedRowStyle;
         private static GUIStyle _actionButtonStyle;
         private static GUIStyle _emptyTitleStyle;
         private static GUIStyle _emptyBodyStyle;
+        private static GUIStyle _previewBodyStyle;
         private static GUIStyle _iconButtonStyle;
         private static GUIContent _pinnedIconContent;
         private static GUIContent _unpinnedIconContent;
@@ -94,9 +112,19 @@ namespace Kingfisher.KClipboard
         private static bool _hasBuiltStyles;
         private static bool _isStyleDark;
 
+        [SerializeField] private float previewHeight = DefaultPreviewHeight;
+
         private readonly List<string> _timeLabels = new();
 
+        private KClipboardData.HistoryEntry _selectedEntry;
+        private KClipboardData.HistoryEntry _pendingSelection;
+        private KClipboardData.HistoryEntry _previewEntry;
+        private GameObject _previewHost;
+        private Component _previewComponent;
+        private Editor _previewEditor;
+        private GUIContent _previewTitleContent;
         private Vector2 _scroll;
+        private Vector2 _previewScroll;
         private int _hoveredIndex = NoIndex;
         private int _animatedActionsIndex = NoIndex;
         private int _pendingRemovalIndex = NoIndex;
@@ -105,6 +133,9 @@ namespace Kingfisher.KClipboard
         private float _deltaTime;
         private double _lastLayoutTime;
         private double _nextTimeLabelRefresh;
+        private bool _hasPendingSelection;
+        private bool _hasPreviewEdits;
+        private bool _isResizingPreview;
         private bool _hasSelection;
 
         #endregion
@@ -112,6 +143,8 @@ namespace Kingfisher.KClipboard
         #region Property
 
         private static List<KClipboardData.HistoryEntry> Entries => KClipboard.EnsureData().entries;
+
+        private bool HasPreview => this._selectedEntry != null;
 
         #endregion
 
@@ -126,17 +159,24 @@ namespace Kingfisher.KClipboard
             this._hasSelection = Selection.gameObjects.Length > 0;
         }
 
+        private void OnDisable() => DestroyPreview();
+
         private void OnGUI()
         {
             BuildStyles();
             RefreshTimeLabels();
             UpdateActionsAnimation();
+            EnsurePreview();
 
             DrawToolbar();
-            DrawBody();
 
-            ApplyPendingRemoval();
+            var toolbarHeight = EditorStyles.toolbar.fixedHeight;
+
+            DrawBody(new Rect(0f, toolbarHeight, position.width, position.height - toolbarHeight));
+
+            ApplyPendingSelection();
             ApplyPendingPin();
+            ApplyPendingRemoval();
             RepaintOnHoverChange();
         }
 
@@ -162,7 +202,11 @@ namespace Kingfisher.KClipboard
             SetGUIEnabled(KClipboard.EnsureData().HasUnpinned());
 
             if (GUILayout.Button(ClearButtonContent, EditorStyles.toolbarButton))
+            {
                 KClipboard.ClearHistory();
+
+                ValidateSelection();
+            }
 
             ResetGUIEnabled();
 
@@ -181,15 +225,42 @@ namespace Kingfisher.KClipboard
             ResetGUIEnabled();
         }
 
-        private void DrawBody()
+        private void DrawBody(Rect rect)
         {
+            var paneHeight = GetPreviewHeight(rect.height);
+
+            DrawList(new Rect(rect.x, rect.y, rect.width, rect.height - paneHeight));
+
+            if (paneHeight <= 0f) return;
+
+            DrawPreview(new Rect(rect.x, rect.yMax - paneHeight, rect.width, paneHeight));
+        }
+
+        private float GetPreviewHeight(float bodyHeight)
+        {
+            if (!HasPreview) return 0f;
+
+            var maxHeight = bodyHeight - MinListHeight;
+
+            if (maxHeight < MinPreviewHeight) return 0f;
+
+            return Mathf.Clamp(this.previewHeight, MinPreviewHeight, maxHeight);
+        }
+
+        private void DrawList(Rect rect)
+        {
+            GUILayout.BeginArea(rect);
+
             if (Entries.Count == 0)
-            {
-                DrawEmptyMessage(GUILayoutUtility.GetRect(0f, 0f, ExpandOptions));
+                DrawEmptyMessage(new Rect(0f, 0f, rect.width, rect.height));
+            else
+                DrawScrolledRows();
 
-                return;
-            }
+            GUILayout.EndArea();
+        }
 
+        private void DrawScrolledRows()
+        {
             this._scroll = EditorGUILayout.BeginScrollView(this._scroll);
 
             DrawRows();
@@ -232,7 +303,7 @@ namespace Kingfisher.KClipboard
         {
             var rowRect = GUILayoutUtility.GetRect(0f, RowHeight, ExpandWidthOptions);
 
-            DrawZebraBackground(rowRect, index);
+            DrawRowBackground(rowRect, index, entry == this._selectedEntry);
 
             if (CurEvent.IsRepaint && rowRect.IsHovered())
                 this._hoveredIndex = index;
@@ -247,18 +318,23 @@ namespace Kingfisher.KClipboard
 
             DrawEntry(contentRect, entry, timeLabel, index);
 
-            if (!isAnimated) return;
+            if (isAnimated)
+                DrawActionButtons(rowRect, entry, index);
 
-            DrawActionButtons(rowRect, entry, index);
+            HandleRowClick(rowRect, entry);
         }
 
-        private static void DrawZebraBackground(Rect rowRect, int index)
+        private static void DrawRowBackground(Rect rowRect, int index, bool isSelected)
         {
             if (!CurEvent.IsRepaint) return;
 
             var style = index % 2 == 0 ? _evenRowStyle : _oddRowStyle;
 
             style?.Draw(rowRect, false, false, false, false);
+
+            if (!isSelected) return;
+
+            _selectedRowStyle?.Draw(rowRect, false, false, true, true);
         }
 
         private void DrawEntry(Rect contentRect, KClipboardData.HistoryEntry entry, string timeLabel, int index)
@@ -317,6 +393,184 @@ namespace Kingfisher.KClipboard
             this._pendingRemovalIndex = index;
         }
 
+        private void HandleRowClick(Rect rowRect, KClipboardData.HistoryEntry entry)
+        {
+            if (!CurEvent.IsMouseDown) return;
+            if (CurEvent.MouseButton != LeftMouseButton) return;
+            if (!rowRect.IsHovered()) return;
+
+            CurEvent.Use();
+
+            this._pendingSelection = this._selectedEntry == entry ? null : entry;
+            this._hasPendingSelection = true;
+        }
+
+        #endregion
+
+        #region Preview
+
+        private void DrawPreview(Rect rect)
+        {
+            var headerRect = new Rect(rect.x, rect.y, rect.width, EditorStyles.toolbar.fixedHeight);
+            var saveRect = new Rect(headerRect.xMax - SaveButtonWidth, headerRect.y, SaveButtonWidth, headerRect.height);
+
+            DrawPreviewHeader(headerRect, saveRect);
+            HandlePreviewResize(new Rect(headerRect.x, headerRect.y, saveRect.x - headerRect.x, headerRect.height));
+
+            GUILayout.BeginArea(new Rect(rect.x, headerRect.yMax, rect.width, rect.height - headerRect.height));
+
+            this._previewScroll = EditorGUILayout.BeginScrollView(this._previewScroll);
+
+            DrawPreviewBody();
+
+            EditorGUILayout.EndScrollView();
+
+            GUILayout.EndArea();
+        }
+
+        private void DrawPreviewHeader(Rect rect, Rect saveRect)
+        {
+            if (CurEvent.IsRepaint)
+                EditorStyles.toolbar.Draw(rect, false, false, false, false);
+
+            var headerWidth = PreviewHeaderLabel.GetLabelWidth();
+            var titleX = rect.x + Padding + headerWidth + ActionGap;
+
+            SetGUIEnabled(false);
+
+            GUI.Label(new Rect(rect.x + Padding, rect.y, headerWidth, rect.height), PreviewHeaderContent, EditorStyles.miniLabel);
+
+            ResetGUIEnabled();
+
+            DrawPreviewTitle(new Rect(titleX, rect.y, saveRect.x - Padding - titleX, rect.height));
+
+            DrawSaveButton(saveRect);
+
+            EditorGUIUtility.AddCursorRect(new Rect(rect.x, rect.y, saveRect.x - rect.x, rect.height), MouseCursor.ResizeVertical);
+        }
+
+        private void DrawPreviewTitle(Rect rect)
+        {
+            if (rect.width <= 0f) return;
+            if (this._previewTitleContent == null) return;
+
+            GUI.Label(rect, this._previewTitleContent);
+        }
+
+        private void DrawSaveButton(Rect rect)
+        {
+            SetGUIEnabled(this._hasPreviewEdits);
+
+            var wasClicked = GUI.Button(rect, SaveButtonContent, EditorStyles.toolbarButton);
+
+            ResetGUIEnabled();
+
+            if (!wasClicked) return;
+
+            KClipboard.UpdateEntryJson(this._previewEntry, EditorJsonUtility.ToJson(this._previewComponent));
+
+            this._hasPreviewEdits = false;
+        }
+
+        private void DrawPreviewBody()
+        {
+            if (!this._previewEditor)
+            {
+                GUILayout.Label(PreviewUnavailableContent, _emptyBodyStyle);
+
+                return;
+            }
+
+            var previousLabelWidth = EditorGUIUtility.labelWidth;
+
+            EditorGUIUtility.labelWidth = Mathf.Max(position.width * PreviewLabelWidthRatio, MinPreviewLabelWidth);
+
+            EditorGUILayout.BeginVertical(_previewBodyStyle);
+
+            EditorGUI.BeginChangeCheck();
+
+            this._previewEditor.OnInspectorGUI();
+
+            if (EditorGUI.EndChangeCheck())
+                this._hasPreviewEdits = true;
+
+            EditorGUILayout.EndVertical();
+
+            EditorGUIUtility.labelWidth = previousLabelWidth;
+        }
+
+        private void HandlePreviewResize(Rect headerRect)
+        {
+            if (CurEvent.IsMouseUp)
+                this._isResizingPreview = false;
+
+            if (CurEvent.IsMouseDown && CurEvent.MouseButton == LeftMouseButton && headerRect.IsHovered())
+            {
+                this._isResizingPreview = true;
+
+                CurEvent.Use();
+            }
+
+            if (!this._isResizingPreview) return;
+            if (!CurEvent.IsMouseDrag) return;
+
+            this.previewHeight -= CurEvent.MouseDelta.y;
+
+            CurEvent.Use();
+
+            Repaint();
+        }
+
+        private void EnsurePreview()
+        {
+            if (this._previewEntry == this._selectedEntry && this._previewEditor) return;
+
+            DestroyPreview();
+
+            this._previewEntry = this._selectedEntry;
+
+            if (this._previewEntry == null) return;
+            if (string.IsNullOrEmpty(this._previewEntry.componentTypeName)) return;
+
+            var componentType = Type.GetType(this._previewEntry.componentTypeName);
+
+            if (componentType == null || componentType.IsAbstract || !typeof(Component).IsAssignableFrom(componentType)) return;
+
+            this._previewHost = EditorUtility.CreateGameObjectWithHideFlags(PreviewHostName, HideFlags.HideAndDontSave);
+            this._previewComponent = this._previewHost.GetComponent(componentType);
+
+            if (this._previewComponent == null)
+                this._previewComponent = this._previewHost.AddComponent(componentType);
+
+            if (this._previewComponent == null)
+            {
+                DestroyPreview();
+
+                return;
+            }
+
+            EditorJsonUtility.FromJsonOverwrite(this._previewEntry.json, this._previewComponent);
+
+            this._previewEditor = Editor.CreateEditor(this._previewComponent);
+            this._previewTitleContent = new GUIContent(this._previewEntry.componentTypeLabel, EditorGUIUtility.ObjectContent(this._previewComponent, componentType).image);
+        }
+
+        private void DestroyPreview()
+        {
+            if (this._previewEditor)
+                DestroyImmediate(this._previewEditor);
+
+            if (this._previewHost)
+                DestroyImmediate(this._previewHost);
+
+            this._previewTitleContent = null;
+            this._previewEditor = null;
+            this._previewComponent = null;
+            this._previewHost = null;
+            this._previewEntry = null;
+            this._hasPreviewEdits = false;
+        }
+
         #endregion
 
         #region Entry Action
@@ -326,6 +580,17 @@ namespace Kingfisher.KClipboard
             if (KClipboard.TryPasteToSelected(entry, out var message)) return;
 
             Debug.LogError(string.Format(PasteFailureLogFormat, message));
+        }
+
+        private void ApplyPendingSelection()
+        {
+            if (!this._hasPendingSelection) return;
+
+            this._selectedEntry = this._pendingSelection;
+            this._pendingSelection = null;
+            this._hasPendingSelection = false;
+
+            Repaint();
         }
 
         private void ApplyPendingPin()
@@ -349,7 +614,17 @@ namespace Kingfisher.KClipboard
 
             this._pendingRemovalIndex = NoIndex;
 
+            ValidateSelection();
+
             Repaint();
+        }
+
+        private void ValidateSelection()
+        {
+            if (this._selectedEntry == null) return;
+            if (Entries.Contains(this._selectedEntry)) return;
+
+            this._selectedEntry = null;
         }
 
         #endregion
@@ -405,6 +680,7 @@ namespace Kingfisher.KClipboard
 
             this._lastLayoutTime = EditorApplication.timeSinceStartup;
         }
+
         #endregion
 
         #region Time Label
@@ -415,6 +691,8 @@ namespace Kingfisher.KClipboard
 
             if (this._timeLabels.Count == entries.Count && EditorApplication.timeSinceStartup < this._nextTimeLabelRefresh) return;
 
+            if (this._timeLabels.Count != entries.Count)
+                ValidateSelection();
 
             this._nextTimeLabelRefresh = EditorApplication.timeSinceStartup + TimeLabelRefreshInterval;
 
@@ -448,12 +726,15 @@ namespace Kingfisher.KClipboard
 
             _evenRowStyle = GUI.skin.FindStyle(EvenRowStyleName);
             _oddRowStyle = GUI.skin.FindStyle(OddRowStyleName);
+            _selectedRowStyle = GUI.skin.FindStyle(SelectedRowStyleName);
 
             _actionButtonStyle = new GUIStyle(GUI.skin.button) { alignment = TextAnchor.MiddleCenter, fixedHeight = 0f, fixedWidth = 0f };
 
             _emptyTitleStyle = new GUIStyle(EditorStyles.boldLabel) { alignment = TextAnchor.MiddleCenter, wordWrap = true };
 
             _emptyBodyStyle = new GUIStyle(EditorStyles.miniLabel) { alignment = TextAnchor.UpperCenter, wordWrap = true };
+
+            _previewBodyStyle = new GUIStyle { padding = new RectOffset(PreviewPadding, PreviewPadding, PreviewPadding, PreviewPadding) };
 
             _iconButtonStyle = new GUIStyle(EditorStyles.iconButton)
             {

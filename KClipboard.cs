@@ -95,7 +95,7 @@ namespace Kingfisher.KClipboard
 
         private static bool TryResolveComponentType(KClipboardData.HistoryEntry entry, out Type componentType, out string message)
         {
-            componentType = Type.GetType(entry.componentTypeName);
+            componentType = string.IsNullOrEmpty(entry.componentTypeName) ? null : Type.GetType(entry.componentTypeName);
 
             if (componentType == null)
             {
@@ -181,6 +181,8 @@ namespace Kingfisher.KClipboard
 
             Libs.KData.Flush();
         }
+
+        public static void UpdateEntryJson(KClipboardData.HistoryEntry entry, string json) => EnsureData().SetJson(entry, json);
 
         public static void ClearHistory()
         {
