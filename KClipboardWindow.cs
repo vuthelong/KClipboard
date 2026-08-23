@@ -33,8 +33,8 @@ namespace Kingfisher.KClipboard
 
         private const string PinnedIconName = "pinned";
         private const string UnpinnedIconName = "pin";
-        private const string PasteIconName = "Clipboard";
-        private const string DeleteIconName = "TreeEditor.Trash";
+        private const string PasteIconName = "Paste values";
+        private const string DeleteIconName = "CrossIcon";
 
         private const string PinnedTooltip = "Pinned - kept when the history is trimmed or cleared";
         private const string UnpinnedTooltip = "Pin so this entry survives trimming and Clear history";
@@ -65,6 +65,7 @@ namespace Kingfisher.KClipboard
 
         private const float ActionGap = 4f;
         private const float ActionButtonGap = 2f;
+        private const float ActionIconSize = 16f;
         private const float PinIconSize = 16f;
         private const float RowIconSize = 16f;
         private const float PinButtonSize = 26f;
@@ -72,6 +73,9 @@ namespace Kingfisher.KClipboard
         private const float EmptyTextWidth = 260f;
         private const float EmptyTitleGap = 2f;
         private const float UnpinnedIconAlpha = .5f;
+        private const float ActionIconBrightnessDark = .78f;
+        private const float ActionIconBrightnessLight = .49f;
+        private const float DisabledActionIconAlpha = .5f;
         private const float LabelIndent = PinButtonSize + ActionGap;
 
         private const float SaveButtonWidth = 48f;
@@ -98,6 +102,10 @@ namespace Kingfisher.KClipboard
         private static readonly Color RowOddColorLight = Greyscale(.85f);
         private static readonly Color PinnedIconColor = Greyscale(1f);
         private static readonly Color UnpinnedIconColor = Greyscale(1f, UnpinnedIconAlpha);
+        private static readonly Color ActionIconColorDark = Greyscale(ActionIconBrightnessDark);
+        private static readonly Color ActionIconColorLight = Greyscale(ActionIconBrightnessLight);
+        private static readonly Color DisabledActionIconColorDark = Greyscale(ActionIconBrightnessDark, DisabledActionIconAlpha);
+        private static readonly Color DisabledActionIconColorLight = Greyscale(ActionIconBrightnessLight, DisabledActionIconAlpha);
         private static readonly float ActionsWidth = (ActionButtonSize + ActionButtonGap) * ActionButtonCount;
 
         private static readonly GUIContent NoSelectionHintContent = new(NoSelectionHint);
@@ -108,6 +116,8 @@ namespace Kingfisher.KClipboard
         private static readonly GUIContent ClearButtonContent = new("Clear history");
         private static readonly GUIContent SaveButtonContent = new("Save", "Write these values back to the history entry");
         private static readonly GUIContent CopyButtonContent = new("Copy", "Copy these values to Unity's component clipboard");
+        private static readonly GUIContent PasteButtonContent = new(string.Empty, PasteTooltip);
+        private static readonly GUIContent DeleteButtonContent = new(string.Empty, DeleteTooltip);
 
         private static readonly GUILayoutOption[] ExpandWidthOptions = { GUILayout.ExpandWidth(true) };
         private static readonly Dictionary<string, Texture> IconsByKey = new();
@@ -121,8 +131,8 @@ namespace Kingfisher.KClipboard
         private static GUIStyle _iconButtonStyle;
         private static GUIContent _pinnedIconContent;
         private static GUIContent _unpinnedIconContent;
-        private static GUIContent _pasteIconContent;
-        private static GUIContent _deleteIconContent;
+        private static Texture _pasteIcon;
+        private static Texture _deleteIcon;
         private static bool _hasBuiltStyles;
         private static bool _isStyleDark;
 
@@ -165,6 +175,10 @@ namespace Kingfisher.KClipboard
         private static Color RowEvenColor => IsDarkTheme ? RowEvenColorDark : RowEvenColorLight;
 
         private static Color RowOddColor => IsDarkTheme ? RowOddColorDark : RowOddColorLight;
+
+        private static Color ActionIconColor => IsDarkTheme ? ActionIconColorDark : ActionIconColorLight;
+
+        private static Color DisabledActionIconColor => IsDarkTheme ? DisabledActionIconColorDark : DisabledActionIconColorLight;
 
         private bool HasPreview => this._selectedEntry != null;
 
@@ -383,7 +397,7 @@ namespace Kingfisher.KClipboard
 
             GUI.Label(new Rect(labelX, contentRect.y, labelWidth, EditorGUIUtility.singleLineHeight), entry.componentTypeLabel);
 
-            DrawTimeLabel(new Rect(iconX, contentRect.yMax - EditorGUIUtility.singleLineHeight, timeWidth, EditorGUIUtility.singleLineHeight), timeLabel);
+            DrawTimeLabel(new Rect(iconX + 5f, contentRect.yMax - EditorGUIUtility.singleLineHeight, timeWidth, EditorGUIUtility.singleLineHeight), timeLabel);
         }
 
         private static void DrawRowIcon(Rect rect, KClipboardData.HistoryEntry entry)
@@ -451,16 +465,35 @@ namespace Kingfisher.KClipboard
 
             SetGUIEnabled(this._hasSelection);
 
-            var wasPasteClicked = GUI.Button(pasteRect, _pasteIconContent, _actionButtonStyle);
+            var wasPasteClicked = GUI.Button(pasteRect, PasteButtonContent, _actionButtonStyle);
 
             ResetGUIEnabled();
+
+            DrawActionIcon(pasteRect, _pasteIcon, this._hasSelection ? ActionIconColor : DisabledActionIconColor);
 
             if (wasPasteClicked)
                 PasteEntry(entry);
 
-            if (!GUI.Button(deleteRect, _deleteIconContent, _actionButtonStyle)) return;
+            var wasDeleteClicked = GUI.Button(deleteRect, DeleteButtonContent, _actionButtonStyle);
+
+            DrawActionIcon(deleteRect, _deleteIcon, ActionIconColor);
+
+            if (!wasDeleteClicked) return;
 
             this._pendingRemovalIndex = index;
+        }
+
+        private static void DrawActionIcon(Rect buttonRect, Texture icon, Color color)
+        {
+            if (icon == null) return;
+
+            var iconRect = new Rect(buttonRect.center.x - ActionIconSize * .5f, buttonRect.center.y - ActionIconSize * .5f, ActionIconSize, ActionIconSize);
+
+            SetGUIColor(color);
+
+            GUI.DrawTexture(iconRect, icon, ScaleMode.ScaleToFit);
+
+            ResetGUIColor();
         }
 
         private void HandleRowClick(Rect rowRect, KClipboardData.HistoryEntry entry)
@@ -871,8 +904,8 @@ namespace Kingfisher.KClipboard
 
             _pinnedIconContent = new GUIContent(EditorIcons.GetTexture(PinnedIconName), PinnedTooltip);
             _unpinnedIconContent = new GUIContent(EditorIcons.GetTexture(UnpinnedIconName), UnpinnedTooltip);
-            _pasteIconContent = new GUIContent(EditorIcons.GetTexture(PasteIconName), PasteTooltip);
-            _deleteIconContent = new GUIContent(EditorIcons.GetTexture(DeleteIconName), DeleteTooltip);
+            _pasteIcon = EditorIcons.GetIcon(PasteIconName);
+            _deleteIcon = EditorIcons.GetIcon(DeleteIconName);
         }
 
         [MenuItem(MenuPath, false, MenuPriority)]
