@@ -19,19 +19,19 @@ namespace Kingfisher.KClipboard
         private const string WindowTitle = "KClipboard";
         private const int MenuPriority = 911;
 
-        // Restore once this tool leaves active development - see the commented Open()/HideMenuItemWhenKSettingInstalled below.
-        // private const string KSettingsWindowTypeName = "Kingfisher.KSetting.KSettingsWindow, Kingfisher.KSetting";
-        // private const string OpenMethodName = "Open";
-        // private const string RemoveMenuItemMethodName = "RemoveMenuItem";
-        // private const string MenuItemExistsMethodName = "MenuItemExists";
-        // private const string RebuildAllMenusMethodName = "RebuildAllMenus";
-        //
-        // private const BindingFlags InternalStaticMemberFlags = BindingFlags.NonPublic | BindingFlags.Static;
+        private const string KSettingsWindowTypeName = "Kingfisher.KSetting.KSettingsWindow, Kingfisher.KSetting";
+        private const string OpenMethodName = "Open";
+        private const string RemoveMenuItemMethodName = "RemoveMenuItem";
+        private const string MenuItemExistsMethodName = "MenuItemExists";
+        private const string RebuildAllMenusMethodName = "RebuildAllMenus";
+
+        private const BindingFlags InternalStaticMemberFlags = BindingFlags.NonPublic | BindingFlags.Static;
 
         private const string DisabledPropertyName = "PluginDisabled";
         private const string LayoutFieldName = "SettingsLayout";
         private const string DeleteDataMethodName = "DeleteData";
         private const string OpenToolMethodName = "OpenTool";
+        private const string DataPathPropertyName = "DataPath";
         private const string KeyPrefixFieldName = "KeyPrefix";
         private const string KeyFieldSuffix = "Key";
 
@@ -68,9 +68,22 @@ namespace Kingfisher.KClipboard
         private const int LegacyKeyOffset = 1;
 
         private const char PathSeparator = '/';
+        private const char WindowsPathSeparator = '\\';
         private const string DataFolderName = ".KData";
         private const string AssetsFolderMarker = "/Assets";
 
+        private const string DeleteDataTitleFormat = "Delete {0} data?";
+        private const string DeleteDataEmptyBodyFormat = "{0} has nothing saved in {1} right now.\n\nIts in-memory copy will still be cleared.";
+        private const string DeleteDataBodyFormat = "This permanently deletes:\n\n{0}\n\nfrom {1}. It cannot be undone.";
+        private const string ResetSettingsTitleFormat = "Reset {0} settings?";
+
+        private const string ResetSettingsBodyFormat = "This puts every {0} setting back to its default.\n\n" +
+                                                       "Saved data in .KData is left alone. Settings are stored per project and per machine, so both copies are cleared, and scripts will reload.";
+
+        private const string FileSeparator = "\n";
+        private const string DeleteConfirmLabel = "Delete";
+        private const string ResetConfirmLabel = "Reset";
+        private const string CancelLabel = "Cancel";
         private const string BreadcrumbRoot = "Tools  ›";
 
         private const float MinWindowWidth = 400f;
@@ -149,6 +162,7 @@ namespace Kingfisher.KClipboard
 
         private static readonly GUILayoutOption[] ExpandWidthOptions = { GUILayout.ExpandWidth(true) };
         private static readonly Dictionary<string, (GUIContent Content, float Width, int StylesVersion)> SectionTitleContents = new();
+        private static readonly List<string> StoredDataFiles = new();
         private static readonly List<SettingsSection> Sections = new();
 
         private static Color _previousContentColor;
@@ -170,6 +184,7 @@ namespace Kingfisher.KClipboard
         private static SettingsSetting _disabledSetting;
         private static MethodInfo _deleteDataMethod;
         private static MethodInfo _openToolMethod;
+        private static PropertyInfo _dataPathProperty;
         private static string _sharedDataFolderPath;
 
         private Vector2 _scroll;
@@ -475,7 +490,7 @@ namespace Kingfisher.KClipboard
 
                 if (GUI.Button(deleteRect, DeleteDataButtonContent, _dangerButtonStyle))
                 {
-                    DeleteData();
+                    ConfirmDeleteData();
                 }
 
                 GUI.backgroundColor = previousBackground;
@@ -487,7 +502,7 @@ namespace Kingfisher.KClipboard
 
             if (GUI.Button(resetRect, ResetButtonContent, _buttonStyle))
             {
-                ResetSettings();
+                ConfirmResetSettings();
             }
 
             if (!CanOpenTool) return resetRect.x;
@@ -621,6 +636,7 @@ namespace Kingfisher.KClipboard
 
             _deleteDataMethod = menuType.GetMethod(DeleteDataMethodName, StaticMemberFlags, null, Type.EmptyTypes, null);
             _openToolMethod = menuType.GetMethod(OpenToolMethodName, StaticMemberFlags, null, Type.EmptyTypes, null);
+            _dataPathProperty = menuType.GetProperty(DataPathPropertyName, StaticMemberFlags);
             _sharedDataFolderPath = GetSharedDataFolderPath();
 
             var propertiesByName = new Dictionary<string, PropertyInfo>();
@@ -837,10 +853,20 @@ namespace Kingfisher.KClipboard
 
         #endregion
 
-        #region Tool Action
+        #region Confirmation Dialog
 
-        private void DeleteData()
+        private void ConfirmDeleteData()
         {
+            CollectStoredDataFiles();
+
+            var folder = GetDisplayDataFolder();
+
+            var body = StoredDataFiles.Count == 0
+                ? string.Format(DeleteDataEmptyBodyFormat, WindowTitle, folder)
+                : string.Format(DeleteDataBodyFormat, string.Join(FileSeparator, StoredDataFiles), folder);
+
+            if (!EditorUtility.DisplayDialog(string.Format(DeleteDataTitleFormat, WindowTitle), body, DeleteConfirmLabel, CancelLabel)) return;
+
             EditorApplication.delayCall += () =>
             {
                 _deleteDataMethod?.Invoke(null, null);
@@ -851,8 +877,12 @@ namespace Kingfisher.KClipboard
             };
         }
 
-        private static void ResetSettings()
+        private static void ConfirmResetSettings()
         {
+            var body = string.Format(ResetSettingsBodyFormat, WindowTitle);
+
+            if (!EditorUtility.DisplayDialog(string.Format(ResetSettingsTitleFormat, WindowTitle), body, ResetConfirmLabel, CancelLabel)) return;
+
             EditorApplication.delayCall += () =>
             {
                 ResetStoredKeys();
@@ -863,6 +893,44 @@ namespace Kingfisher.KClipboard
 
         private static void InvokeOpenTool() => _openToolMethod?.Invoke(null, null);
 
+        private static string GetDisplayDataFolder()
+        {
+            if (_dataPathProperty?.GetValue(null) is string path)
+            {
+                return Path.GetDirectoryName(path)?.Replace(WindowsPathSeparator, PathSeparator) ?? DataFolderName;
+            }
+
+            return DataFolderName;
+        }
+
+        private static void CollectStoredDataFiles()
+        {
+            StoredDataFiles.Clear();
+
+            if (_dataPathProperty?.GetValue(null) is string path)
+            {
+                if (File.Exists(path))
+                {
+                    StoredDataFiles.Add(Path.GetFileName(path));
+                }
+
+                return;
+            }
+
+            if (!Directory.Exists(_sharedDataFolderPath)) return;
+
+            var filePaths = Directory.GetFiles(_sharedDataFolderPath);
+
+            for (var i = 0; i < filePaths.Length; i++)
+            {
+                var fileName = Path.GetFileName(filePaths[i]);
+
+                if (!fileName.StartsWith(WindowTitle, StringComparison.Ordinal)) continue;
+
+                StoredDataFiles.Add(fileName);
+            }
+        }
+
         #endregion
 
         #region Setting Reset
@@ -870,8 +938,8 @@ namespace Kingfisher.KClipboard
         // Every property backed by EditorPrefsCached has a "{PropertyName}Key" const alongside it (e.g.
         // MaxHistoryCount / MaxHistoryCountKey). This window only ever runs when K-Setting is
         // absent, so EditorPrefsCached always falls through to raw EditorPrefs - deleting every "*Key"
-        // constant that starts with this tool's own KeyPrefix clears all of it, including keys that
-        // aren't exposed as a public bool/float/Color property.
+        // constant that starts with this tool's own KeyPrefix clears all of it, including keys (like a
+        // choice group's backing int) that aren't exposed as a public bool/float/Color property.
         private static void ResetStoredKeys()
         {
             var menuType = typeof(KClipboardMenu);
@@ -968,6 +1036,13 @@ namespace Kingfisher.KClipboard
         [MenuItem(MenuPath, false, MenuPriority)]
         public static void Open()
         {
+            if (Type.GetType(KSettingsWindowTypeName)?.GetMethod(OpenMethodName, StaticMemberFlags) is { } openMethod)
+            {
+                openMethod.Invoke(null, null);
+
+                return;
+            }
+
             BuildModel();
 
             var window = GetWindow<KClipboardSettingsWindow>(utility: false, title: WindowTitle, focus: true);
@@ -975,44 +1050,24 @@ namespace Kingfisher.KClipboard
             window.minSize = new Vector2(MinWindowWidth, MinWindowHeight);
         }
 
-        // Restore once this tool leaves active development, to redirect into the combined KTools Setting window
-        // and hide this tool's own standalone menu item when K-Setting is installed, matching every other tool:
-        //
-        // [MenuItem(MenuPath, false, MenuPriority)]
-        // public static void Open()
-        // {
-        //     if (Type.GetType(KSettingsWindowTypeName)?.GetMethod(OpenMethodName, StaticMemberFlags) is { } openMethod)
-        //     {
-        //         openMethod.Invoke(null, null);
-        //
-        //         return;
-        //     }
-        //
-        //     BuildModel();
-        //
-        //     var window = GetWindow<KClipboardSettingsWindow>(utility: false, title: WindowTitle, focus: true);
-        //
-        //     window.minSize = new Vector2(MinWindowWidth, MinWindowHeight);
-        // }
-        //
-        // [InitializeOnLoadMethod]
-        // private static void HideMenuItemWhenKSettingInstalled()
-        // {
-        //     if (Type.GetType(KSettingsWindowTypeName) == null) return;
-        //
-        //     EditorApplication.delayCall += () =>
-        //     {
-        //         var menuType = typeof(Menu);
-        //
-        //         menuType.GetMethod(RemoveMenuItemMethodName, InternalStaticMemberFlags)?.Invoke(null, new object[] { MenuPath });
-        //
-        //         var hasMenuItem = menuType.GetMethod(MenuItemExistsMethodName, InternalStaticMemberFlags)?.Invoke(null, new object[] { MenuPath });
-        //         if (hasMenuItem is false) return;
-        //
-        //         menuType.GetMethod(RebuildAllMenusMethodName, InternalStaticMemberFlags)?.Invoke(null, null);
-        //         InternalEditorUtility.ReloadWindowLayoutMenu();
-        //     };
-        // }
+        [InitializeOnLoadMethod]
+        private static void HideMenuItemWhenKSettingInstalled()
+        {
+            if (Type.GetType(KSettingsWindowTypeName) == null) return;
+
+            EditorApplication.delayCall += () =>
+            {
+                var menuType = typeof(Menu);
+
+                menuType.GetMethod(RemoveMenuItemMethodName, InternalStaticMemberFlags)?.Invoke(null, new object[] { MenuPath });
+
+                var hasMenuItem = menuType.GetMethod(MenuItemExistsMethodName, InternalStaticMemberFlags)?.Invoke(null, new object[] { MenuPath });
+                if (hasMenuItem is false) return;
+
+                menuType.GetMethod(RebuildAllMenusMethodName, InternalStaticMemberFlags)?.Invoke(null, null);
+                InternalEditorUtility.ReloadWindowLayoutMenu();
+            };
+        }
 
         private static void Apply(SettingsSetting setting, bool isOn)
         {
