@@ -15,7 +15,7 @@ namespace Kingfisher.KClipboard
     {
         #region Field
 
-        private const string MenuPath = "Tools/Kingfisher/KClipboard Setting";
+        private const string MenuPath = "Tools/Kingfisher/K-Clipboard/Setting";
         private const string WindowTitle = "KClipboard";
         private const int MenuPriority = 911;
 

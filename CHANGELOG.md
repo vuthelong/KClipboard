@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Moved the Settings menu item from the top-level `Tools/Kingfisher/KClipboard
+  Setting` into `Tools/Kingfisher/K-Clipboard/Setting`, nested alongside
+  History under the tool's own submenu.
+
 ## [0.1.0] - 2026-08-24
 
 ### Added

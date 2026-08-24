@@ -111,7 +111,7 @@ an entry. Delete that file to commit the folder instead.
 
 ## Settings
 
-**Tools > Kingfisher > KClipboard Setting** opens K-Clipboard's own settings
+**Tools > Kingfisher > K-Clipboard > Setting** opens K-Clipboard's own settings
 window.
 
 Install [K-Setting](https://github.com/vuthelong/KSetting) beside it and you get
