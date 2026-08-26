@@ -267,30 +267,37 @@ namespace Kingfisher.KClipboard
             Undo.IncrementCurrentGroup();
 
             var undoGroup = Undo.GetCurrentGroup();
-            var wrapper = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            GameObject wrapper = null;
 
-            Undo.RegisterCreatedObjectUndo(wrapper, PasteUndoLabel);
-
-            PrefabUtility.UnpackPrefabInstance(wrapper, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
-
-            var targetParent = Selection.activeTransform;
-            var wrapperTransform = wrapper.transform;
-
-            while (wrapperTransform.childCount > 0)
+            try
             {
-                var child = wrapperTransform.GetChild(0);
+                wrapper = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
 
-                Undo.SetTransformParent(child, targetParent, PasteUndoLabel);
+                Undo.RegisterCreatedObjectUndo(wrapper, PasteUndoLabel);
 
-                pastedRoots.Add(child.gameObject);
+                PrefabUtility.UnpackPrefabInstance(wrapper, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
+
+                var targetParent = Selection.activeTransform;
+                var wrapperTransform = wrapper.transform;
+
+                while (wrapperTransform.childCount > 0)
+                {
+                    var child = wrapperTransform.GetChild(0);
+
+                    Undo.SetTransformParent(child, targetParent, PasteUndoLabel);
+
+                    pastedRoots.Add(child.gameObject);
+                }
             }
+            finally
+            {
+                if (wrapper) Undo.DestroyObjectImmediate(wrapper);
 
-            Undo.DestroyObjectImmediate(wrapper);
+                Undo.SetCurrentGroupName(PasteUndoLabel);
+                Undo.CollapseUndoOperations(undoGroup);
 
-            Undo.SetCurrentGroupName(PasteUndoLabel);
-            Undo.CollapseUndoOperations(undoGroup);
-
-            AssetDatabase.DeleteAsset(assetPath);
+                AssetDatabase.DeleteAsset(assetPath);
+            }
 
             return pastedRoots.Count > 0;
         }
@@ -303,7 +310,9 @@ namespace Kingfisher.KClipboard
         {
             if (AssetDatabase.IsValidFolder(TempFolderPath)) return;
 
-            AssetDatabase.CreateFolder(AssetsFolderName, TempFolderPath.Substring(AssetsFolderName.Length + 1));
+            var lastSlash = TempFolderPath.LastIndexOf('/');
+
+            AssetDatabase.CreateFolder(TempFolderPath.Substring(0, lastSlash), TempFolderPath.Substring(lastSlash + 1));
         }
 
         private static string GetUniqueTempAssetPath() => $"{TempFolderPath}/{string.Format(TempAssetNameFormat, Guid.NewGuid())}";

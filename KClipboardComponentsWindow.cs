@@ -675,26 +675,39 @@ namespace Kingfisher.KClipboard
 
             if (componentType == null || componentType.IsAbstract || !typeof(Component).IsAssignableFrom(componentType)) return;
 
-            this._previewHost = EditorUtility.CreateGameObjectWithHideFlags(PreviewHostName, PreviewHostFlags);
-            this._previewComponent = this._previewHost.GetComponent(componentType);
+            // Everything past this point (deserializing possibly-stale stored JSON, constructing a
+            // custom Editor) can throw. DestroyPreview() on failure resets _previewEntry to null too,
+            // so the guard above doesn't get stuck treating this entry as "already handled" - the
+            // next OnGUI retries cleanly instead of leaving an orphaned, un-torn-down preview host.
+            try
+            {
+                this._previewHost = EditorUtility.CreateGameObjectWithHideFlags(PreviewHostName, PreviewHostFlags);
+                this._previewComponent = this._previewHost.GetComponent(componentType);
 
-            if (this._previewComponent == null)
-                this._previewComponent = this._previewHost.AddComponent(componentType);
+                if (this._previewComponent == null)
+                    this._previewComponent = this._previewHost.AddComponent(componentType);
 
-            if (this._previewComponent == null)
+                if (this._previewComponent == null)
+                {
+                    DestroyPreview();
+
+                    return;
+                }
+
+                this._previewComponent.hideFlags = PreviewHostFlags;
+
+                EditorJsonUtility.FromJsonOverwrite(this._previewEntry.json, this._previewComponent);
+
+                this._previewEditor = Editor.CreateEditor(this._previewComponent);
+
+                RefreshPreviewTitle();
+            }
+            catch (Exception exception)
             {
                 DestroyPreview();
 
-                return;
+                Debug.LogException(exception);
             }
-
-            this._previewComponent.hideFlags = PreviewHostFlags;
-
-            EditorJsonUtility.FromJsonOverwrite(this._previewEntry.json, this._previewComponent);
-
-            this._previewEditor = Editor.CreateEditor(this._previewComponent);
-
-            RefreshPreviewTitle();
         }
 
         private void OnPlayModeStateChanged(PlayModeStateChange change)
