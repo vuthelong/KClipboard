@@ -2,7 +2,7 @@
   "name": "com.kingfisher.kclipboard",
   "version": "0.1.0",
   "displayName": "K-Clipboard",
-  "description": "Copy component values from one GameObject and paste them onto a component of the same type on a different GameObject, plus a persisted history stack of everything you've copied - not limited to Unity's native same-GameObject-type clipboard. Pairs with K-Setting, the shared settings backend. Editor-only: nothing is compiled into player builds.",
+  "description": "Two persisted history stacks for the Editor's clipboard: copy a component's values and paste them onto a component of the same type on a different GameObject, or copy a whole GameObject (with children) and paste it back later - not limited to Unity's native same-session, single-item clipboard. Pairs with K-Setting, the shared settings backend. Editor-only: nothing is compiled into player builds.",
   "unity": "2022.3",
   "author": {
     "name": "Kingfisher",
@@ -12,6 +12,8 @@
     "editor",
     "clipboard",
     "components",
+    "gameobjects",
+    "hierarchy",
     "copy-paste",
     "history",
     "productivity"

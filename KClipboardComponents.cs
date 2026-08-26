@@ -8,11 +8,11 @@ using static Kingfisher.KClipboard.Libs.KUtils;
 
 namespace Kingfisher.KClipboard
 {
-    public static class KClipboard
+    public static class KClipboardComponents
     {
         #region Field
 
-        public const string DataFileName = "KClipboard Data.asset";
+        public const string DataFileName = "KClipboard Components Data.asset";
 
         private const string CopyMenuPath = "CONTEXT/Component/Copy to K-Clipboard History";
 
@@ -28,7 +28,7 @@ namespace Kingfisher.KClipboard
         private const string AddedSuffixFormat = " Added the component to {0} of them.";
         private const string FailedSuffixFormat = " Failed on {0}.";
 
-        public static KClipboardData Data;
+        public static KClipboardComponentsData Data;
 
         #endregion
 
@@ -49,13 +49,13 @@ namespace Kingfisher.KClipboard
         {
             var componentType = component.GetType();
 
-            EnsureData().Push(new KClipboardData.HistoryEntry
+            EnsureData().Push(new KClipboardComponentsData.HistoryEntry
             {
                 componentTypeName = componentType.AssemblyQualifiedName,
                 componentTypeLabel = componentType.Name,
                 iconName = GetIconName(component),
                 json = EditorJsonUtility.ToJson(component),
-            }, Mathf.RoundToInt(KClipboardMenu.MaxHistoryCount));
+            }, Mathf.RoundToInt(KClipboardMenu.MaxComponentHistoryCount));
 
             Libs.KData.Flush();
         }
@@ -75,7 +75,7 @@ namespace Kingfisher.KClipboard
 
         #region Paste
 
-        public static bool TryPasteToSelected(KClipboardData.HistoryEntry entry, out string message)
+        public static bool TryPasteToSelected(KClipboardComponentsData.HistoryEntry entry, out string message)
         {
             var gameObjects = Selection.gameObjects;
 
@@ -117,7 +117,7 @@ namespace Kingfisher.KClipboard
             return pastedCount > 0;
         }
 
-        private static bool TryResolveComponentType(KClipboardData.HistoryEntry entry, out Type componentType, out string message)
+        private static bool TryResolveComponentType(KClipboardComponentsData.HistoryEntry entry, out Type componentType, out string message)
         {
             componentType = string.IsNullOrEmpty(entry.componentTypeName) ? null : Type.GetType(entry.componentTypeName);
 
@@ -172,11 +172,11 @@ namespace Kingfisher.KClipboard
 
         #region Method
 
-        public static KClipboardData EnsureData()
+        public static KClipboardComponentsData EnsureData()
         {
             if (Data) return Data;
 
-            Data = Libs.KData.Load<KClipboardData>(DataFileName) ?? Libs.KData.Create<KClipboardData>(DataFileName);
+            Data = Libs.KData.Load<KClipboardComponentsData>(DataFileName) ?? Libs.KData.Create<KClipboardComponentsData>(DataFileName);
 
             Libs.KData.Autosave(Data, DataFileName);
 
@@ -206,7 +206,7 @@ namespace Kingfisher.KClipboard
             Libs.KData.Flush();
         }
 
-        public static void UpdateEntry(KClipboardData.HistoryEntry entry, Component component)
+        public static void UpdateEntry(KClipboardComponentsData.HistoryEntry entry, Component component)
         {
             var data = EnsureData();
 

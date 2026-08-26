@@ -395,6 +395,7 @@ namespace Kingfisher.KClipboard.Libs
             private static readonly Dictionary<string, Texture2D> Icons = new();
             private static readonly HashSet<string> Resolved = new();
             private static readonly Dictionary<(string, bool), GUIContent> Contents = new();
+            private static readonly Dictionary<(string, bool), Texture2D> FoundTextures = new();
 
             private static readonly Dictionary<string, string> CustomIcons = new()
             {
@@ -411,6 +412,15 @@ namespace Kingfisher.KClipboard.Libs
             }
 
             public static Texture GetTexture(string name) => GetContent(name)?.image;
+
+            public static Texture2D FindTexture(string name)
+            {
+                var key = (name, IsDarkTheme);
+
+                if (FoundTextures.TryGetValue(key, out var cached) && cached) return cached;
+
+                return FoundTextures[key] = EditorGUIUtility.FindTexture(name);
+            }
 
             public static Texture2D GetIcon(string iconNameOrPath, bool returnNullIfNotFound = false)
             {

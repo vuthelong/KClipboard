@@ -7,8 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `GameObject > Copy to K-Clipboard History` (also available from the
+  Hierarchy right-click menu) copies the selected GameObject(s) - including
+  their full hierarchy - via Unity's own internal GameObject copy/paste
+  mechanism, and pushes them onto a new, separate persisted history stack.
+- **Tools > Kingfisher > K-Clipboard > GameObject History** window, mirroring
+  the Component history's pin/paste/delete UX, plus a **Copy Selection**
+  toolbar button. Paste works with or without a GameObject selected -
+  placement follows Unity's native Hierarchy-paste behavior for the current
+  selection.
+- A second, independent history-cap setting for the GameObject history.
+
 ### Changed
 
+- K-Clipboard is now an umbrella for two sibling history stacks, so the
+  Component-specific classes/files were renamed: `KClipboard` ->
+  `KClipboardComponents`, `KClipboardData` -> `KClipboardComponentsData`,
+  `KClipboardWindow` -> `KClipboardComponentsWindow`.
+- Renamed the Component history menu item from
+  `Tools/Kingfisher/K-Clipboard/History` to
+  `Tools/Kingfisher/K-Clipboard/Component History`.
+- Renamed the `MaxHistoryCount` setting to `MaxComponentHistoryCount`
+  (including its backing key) - resets to the default of 20 for anyone who had
+  already changed it on a pre-release build.
+- Renamed the Component history's data file on disk to
+  `KClipboard Components Data.asset`; a stale `.KData/KClipboard Data.asset`
+  from a pre-release install is orphaned, not migrated.
 - Moved the Settings menu item from the top-level `Tools/Kingfisher/KClipboard
   Setting` into `Tools/Kingfisher/K-Clipboard/Setting`, nested alongside
   History under the tool's own submenu.

@@ -9,12 +9,12 @@ using static Kingfisher.KClipboard.Libs.KGUI;
 
 namespace Kingfisher.KClipboard
 {
-    public class KClipboardWindow : EditorWindow
+    public class KClipboardComponentsWindow : EditorWindow
     {
         #region Field
 
-        private const string MenuPath = "Tools/Kingfisher/K-Clipboard/History";
-        private const string WindowTitle = "K-Clipboard History";
+        private const string MenuPath = "Tools/Kingfisher/K-Clipboard/Component History";
+        private const string WindowTitle = "K-Clipboard Component History";
         private const int MenuPriority = 912;
 
         private const string EmptyTitle = "Nothing here";
@@ -140,9 +140,9 @@ namespace Kingfisher.KClipboard
 
         private readonly List<string> _timeLabels = new();
 
-        private KClipboardData.HistoryEntry _selectedEntry;
-        private KClipboardData.HistoryEntry _pendingSelection;
-        private KClipboardData.HistoryEntry _previewEntry;
+        private KClipboardComponentsData.HistoryEntry _selectedEntry;
+        private KClipboardComponentsData.HistoryEntry _pendingSelection;
+        private KClipboardComponentsData.HistoryEntry _previewEntry;
         private GameObject _previewHost;
         private Component _previewComponent;
         private Editor _previewEditor;
@@ -168,7 +168,7 @@ namespace Kingfisher.KClipboard
 
         #region Property
 
-        private static List<KClipboardData.HistoryEntry> Entries => KClipboard.EnsureData().entries;
+        private static List<KClipboardComponentsData.HistoryEntry> Entries => KClipboardComponents.EnsureData().entries;
 
         private static Color DividerColor => IsDarkTheme ? DividerColorDark : DividerColorLight;
 
@@ -188,7 +188,7 @@ namespace Kingfisher.KClipboard
 
         private void OnEnable()
         {
-            KClipboard.EnsureData();
+            KClipboardComponents.EnsureData();
 
             wantsMouseMove = true;
 
@@ -243,11 +243,11 @@ namespace Kingfisher.KClipboard
 
             GUILayout.FlexibleSpace();
 
-            SetGUIEnabled(KClipboard.EnsureData().HasUnpinned());
+            SetGUIEnabled(KClipboardComponents.EnsureData().HasUnpinned());
 
             if (GUILayout.Button(ClearButtonContent, EditorStyles.toolbarButton))
             {
-                KClipboard.ClearHistory();
+                KClipboardComponents.ClearHistory();
 
                 ValidateSelection();
             }
@@ -348,7 +348,7 @@ namespace Kingfisher.KClipboard
                 DrawRow(entries[i], this._timeLabels[i], i);
         }
 
-        private void DrawRow(KClipboardData.HistoryEntry entry, string timeLabel, int index)
+        private void DrawRow(KClipboardComponentsData.HistoryEntry entry, string timeLabel, int index)
         {
             var rowRect = GUILayoutUtility.GetRect(0f, RowHeight, ExpandWidthOptions);
             var actionsAmount = index == this._animatedActionsIndex ? this._actionsAmount : 0f;
@@ -384,7 +384,7 @@ namespace Kingfisher.KClipboard
             _selectedRowStyle?.Draw(highlightRect, false, false, true, true);
         }
 
-        private void DrawEntry(Rect contentRect, KClipboardData.HistoryEntry entry, string timeLabel, int index)
+        private void DrawEntry(Rect contentRect, KClipboardComponentsData.HistoryEntry entry, string timeLabel, int index)
         {
             DrawPinButton(new Rect(contentRect.x, contentRect.y + (contentRect.height - PinButtonSize) * .5f, PinButtonSize, PinButtonSize), entry, index);
 
@@ -400,7 +400,7 @@ namespace Kingfisher.KClipboard
             DrawTimeLabel(new Rect(iconX + 5f, contentRect.yMax - EditorGUIUtility.singleLineHeight, timeWidth, EditorGUIUtility.singleLineHeight), timeLabel);
         }
 
-        private static void DrawRowIcon(Rect rect, KClipboardData.HistoryEntry entry)
+        private static void DrawRowIcon(Rect rect, KClipboardComponentsData.HistoryEntry entry)
         {
             var icon = GetComponentIcon(entry);
 
@@ -409,7 +409,7 @@ namespace Kingfisher.KClipboard
             GUI.DrawTexture(rect, icon, ScaleMode.ScaleToFit);
         }
 
-        private static Texture GetComponentIcon(KClipboardData.HistoryEntry entry)
+        private static Texture GetComponentIcon(KClipboardComponentsData.HistoryEntry entry)
         {
             var key = string.IsNullOrEmpty(entry.iconName) ? entry.componentTypeName : entry.iconName;
 
@@ -419,7 +419,7 @@ namespace Kingfisher.KClipboard
             return IconsByKey[key] = LoadComponentIcon(entry);
         }
 
-        private static Texture LoadComponentIcon(KClipboardData.HistoryEntry entry)
+        private static Texture LoadComponentIcon(KClipboardComponentsData.HistoryEntry entry)
         {
             if (!string.IsNullOrEmpty(entry.iconName))
             {
@@ -435,7 +435,7 @@ namespace Kingfisher.KClipboard
             return componentType == null ? null : EditorGUIUtility.ObjectContent(null, componentType).image;
         }
 
-        private void DrawPinButton(Rect rect, KClipboardData.HistoryEntry entry, int index)
+        private void DrawPinButton(Rect rect, KClipboardComponentsData.HistoryEntry entry, int index)
         {
             SetGUIColor(entry.pinned ? PinnedIconColor : UnpinnedIconColor);
 
@@ -457,7 +457,7 @@ namespace Kingfisher.KClipboard
             ResetGUIEnabled();
         }
 
-        private void DrawActionButtons(Rect rowRect, KClipboardData.HistoryEntry entry, int index, float amount)
+        private void DrawActionButtons(Rect rowRect, KClipboardComponentsData.HistoryEntry entry, int index, float amount)
         {
             var slideOffset = ActionsWidth * (1f - amount);
             var deleteRect = new Rect(rowRect.xMax - ActionButtonGap - ActionButtonSize + slideOffset, rowRect.y, ActionButtonSize, ActionButtonSize);
@@ -496,7 +496,7 @@ namespace Kingfisher.KClipboard
             ResetGUIColor();
         }
 
-        private void HandleRowClick(Rect rowRect, KClipboardData.HistoryEntry entry)
+        private void HandleRowClick(Rect rowRect, KClipboardComponentsData.HistoryEntry entry)
         {
             if (!this._isMouseOverList) return;
             if (!CurEvent.IsMouseDown) return;
@@ -601,7 +601,7 @@ namespace Kingfisher.KClipboard
 
             GUIUtility.keyboardControl = 0;
 
-            KClipboard.UpdateEntry(this._previewEntry, this._previewComponent);
+            KClipboardComponents.UpdateEntry(this._previewEntry, this._previewComponent);
 
             RefreshPreviewTitle();
 
@@ -731,9 +731,9 @@ namespace Kingfisher.KClipboard
 
         #region Entry Action
 
-        private static void PasteEntry(KClipboardData.HistoryEntry entry)
+        private static void PasteEntry(KClipboardComponentsData.HistoryEntry entry)
         {
-            if (KClipboard.TryPasteToSelected(entry, out var message)) return;
+            if (KClipboardComponents.TryPasteToSelected(entry, out var message)) return;
 
             Debug.LogError(string.Format(PasteFailureLogFormat, message));
         }
@@ -753,7 +753,7 @@ namespace Kingfisher.KClipboard
         {
             if (this._pendingPinIndex == NoIndex) return;
 
-            KClipboard.TogglePinned(this._pendingPinIndex);
+            KClipboardComponents.TogglePinned(this._pendingPinIndex);
 
             this._pendingPinIndex = NoIndex;
 
@@ -764,7 +764,7 @@ namespace Kingfisher.KClipboard
         {
             if (this._pendingRemovalIndex == NoIndex) return;
 
-            KClipboard.RemoveEntry(this._pendingRemovalIndex);
+            KClipboardComponents.RemoveEntry(this._pendingRemovalIndex);
 
             this._pendingRemovalIndex = NoIndex;
 
@@ -841,7 +841,7 @@ namespace Kingfisher.KClipboard
 
         private void RefreshTimeLabels()
         {
-            var data = KClipboard.EnsureData();
+            var data = KClipboardComponents.EnsureData();
             var entries = data.entries;
             var hasDataChanged = this._timeLabelsVersion != data.Version;
 
@@ -911,7 +911,7 @@ namespace Kingfisher.KClipboard
         [MenuItem(MenuPath, false, MenuPriority)]
         public static void Open()
         {
-            var window = GetWindow<KClipboardWindow>(utility: false, title: WindowTitle, focus: true);
+            var window = GetWindow<KClipboardComponentsWindow>(utility: false, title: WindowTitle, focus: true);
 
             window.minSize = new Vector2(MinWindowWidth, MinWindowHeight);
         }

@@ -10,7 +10,8 @@ namespace Kingfisher.KClipboard
 
         private const string KeyPrefix = "KClipboard-kingfisher-";
 
-        private const string MaxHistoryCountKey = KeyPrefix + "maxHistoryCount";
+        private const string MaxComponentHistoryCountKey = KeyPrefix + "maxComponentHistoryCount";
+        private const string MaxGameObjectHistoryCountKey = KeyPrefix + "maxGameObjectHistoryCount";
         private const string PluginDisabledKey = KeyPrefix + "pluginDisabled";
 
         private const int DefaultMaxHistoryCount = 20;
@@ -19,18 +20,26 @@ namespace Kingfisher.KClipboard
 
         public static readonly string[] SettingsLayout =
         {
-            "# History",
-            "~MaxHistoryCount|Max history entries|" + MinHistoryCount + "|" + MaxHistoryCountLimit,
+            "# Component History",
+            "~MaxComponentHistoryCount|Max history entries|" + MinHistoryCount + "|" + MaxHistoryCountLimit,
+            "# GameObject History",
+            "~MaxGameObjectHistoryCount|Max history entries|" + MinHistoryCount + "|" + MaxHistoryCountLimit,
         };
 
         #endregion
 
         #region Property
 
-        public static float MaxHistoryCount
+        public static float MaxComponentHistoryCount
         {
-            get => EditorPrefsCached.GetInt(MaxHistoryCountKey, DefaultMaxHistoryCount);
-            set => EditorPrefsCached.SetInt(MaxHistoryCountKey, Mathf.RoundToInt(value).Clamp(MinHistoryCount, MaxHistoryCountLimit));
+            get => EditorPrefsCached.GetInt(MaxComponentHistoryCountKey, DefaultMaxHistoryCount);
+            set => EditorPrefsCached.SetInt(MaxComponentHistoryCountKey, Mathf.RoundToInt(value).Clamp(MinHistoryCount, MaxHistoryCountLimit));
+        }
+
+        public static float MaxGameObjectHistoryCount
+        {
+            get => EditorPrefsCached.GetInt(MaxGameObjectHistoryCountKey, DefaultMaxHistoryCount);
+            set => EditorPrefsCached.SetInt(MaxGameObjectHistoryCountKey, Mathf.RoundToInt(value).Clamp(MinHistoryCount, MaxHistoryCountLimit));
         }
 
         public static bool PluginDisabled
@@ -48,9 +57,13 @@ namespace Kingfisher.KClipboard
 
         #region Method
 
-        public static void DeleteData() => KClipboard.DeleteData();
+        public static void DeleteData()
+        {
+            KClipboardComponents.DeleteData();
+            KClipboardGameObjects.DeleteData();
+        }
 
-        public static void OpenTool() => KClipboardWindow.Open();
+        public static void OpenTool() => KClipboardComponentsWindow.Open();
 
         #endregion
     }

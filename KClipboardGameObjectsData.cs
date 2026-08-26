@@ -6,7 +6,7 @@ using static Kingfisher.KClipboard.Libs.KUtils;
 
 namespace Kingfisher.KClipboard
 {
-    public class KClipboardData : ScriptableObject
+    public class KClipboardGameObjectsData : ScriptableObject
     {
         #region Field
 
@@ -54,26 +54,6 @@ namespace Kingfisher.KClipboard
 
             this.entries.RemoveAt(index);
             this.entries.Insert(GetSortedIndex(entry), entry);
-
-            MarkChanged();
-        }
-
-        public void SetJson(HistoryEntry entry, string json)
-        {
-            if (entry == null) return;
-            if (entry.json == json) return;
-
-            entry.json = json;
-
-            MarkChanged();
-        }
-
-        public void SetIconName(HistoryEntry entry, string iconName)
-        {
-            if (entry == null) return;
-            if (entry.iconName == iconName) return;
-
-            entry.iconName = iconName;
 
             MarkChanged();
         }
@@ -159,10 +139,9 @@ namespace Kingfisher.KClipboard
         [Serializable]
         public class HistoryEntry
         {
-            public string componentTypeName;
-            public string componentTypeLabel;
+            public string[] rootNames;
             public string iconName;
-            public string json;
+            public string pasteboardBlob;
             public long timestampTicks;
             public bool pinned;
         }
