@@ -14,7 +14,7 @@ namespace Kingfisher.KClipboard
         #region Field
 
         private const string MenuPath = "Tools/Kingfisher/K-Clipboard/Component History";
-        private const string WindowTitle = "K-Clipboard Component History";
+        private const string WindowTitle = "K-Clipboard Component";
         private const int MenuPriority = 912;
 
         private const string EmptyTitle = "Nothing here";

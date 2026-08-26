@@ -13,7 +13,7 @@ namespace Kingfisher.KClipboard
         #region Field
 
         private const string MenuPath = "Tools/Kingfisher/K-Clipboard/GameObject History";
-        private const string WindowTitle = "K-Clipboard GameObject History";
+        private const string WindowTitle = "K-Clipboard GameObject";
         private const int MenuPriority = 913;
 
         private const string EmptyTitle = "Nothing here";
