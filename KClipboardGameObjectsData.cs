@@ -152,6 +152,7 @@ namespace Kingfisher.KClipboard
             public string name;
             public string iconName;
             public string[] componentIconNames;
+            public string[] componentNames;
             public List<PreviewNode> children = new();
         }
 

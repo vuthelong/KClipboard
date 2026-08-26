@@ -131,6 +131,7 @@ namespace Kingfisher.KClipboard
         private static readonly GUIContent CopySelectionButtonContent = new("Copy Selection", CopySelectionTooltip);
         private static readonly GUIContent PasteButtonContent = new(string.Empty, PasteTooltip);
         private static readonly GUIContent DeleteButtonContent = new(string.Empty, DeleteTooltip);
+        private static readonly GUIContent ComponentTooltipContent = new();
 
         private static readonly GUILayoutOption[] ExpandWidthOptions = { GUILayout.ExpandWidth(true) };
 
@@ -141,6 +142,7 @@ namespace Kingfisher.KClipboard
         private static GUIStyle _emptyBodyStyle;
         private static GUIStyle _previewBodyStyle;
         private static GUIStyle _iconButtonStyle;
+        private static GUIStyle _tooltipOnlyStyle;
         private static GUIContent _pinnedIconContent;
         private static GUIContent _unpinnedIconContent;
         private static Texture _pasteIcon;
@@ -623,7 +625,7 @@ namespace Kingfisher.KClipboard
             var iconRect = new Rect(foldoutRect.xMax, rowRect.y + (rowRect.height - PreviewNodeIconSize) * .5f, PreviewNodeIconSize, PreviewNodeIconSize);
             var labelX = iconRect.xMax + ActionGap;
             var labelWidth = node.name.GetLabelWidth();
-            var labelRect = new Rect(labelX, rowRect.y, Mathf.Max(rowRect.xMax - labelX, 0f), rowRect.height);
+            var labelRect = new Rect(labelX, rowRect.y, Mathf.Min(labelWidth, Mathf.Max(rowRect.xMax - labelX, 0f)), rowRect.height);
 
             if (hasChildren && GUI.Button(foldoutRect, GUIContent.none, GUIStyle.none))
                 ToggleCollapsed(node);
@@ -696,6 +698,7 @@ namespace Kingfisher.KClipboard
         private static void DrawComponentMinimap(Rect rect, KClipboardGameObjectsData.PreviewNode node)
         {
             var iconNames = node.componentIconNames;
+            var names = node.componentNames;
 
             if (iconNames == null || iconNames.Length == 0) return;
 
@@ -712,6 +715,13 @@ namespace Kingfisher.KClipboard
 
                 if (icon != null)
                     GUI.DrawTexture(iconRect, icon, ScaleMode.ScaleToFit);
+
+                if (names != null && i < names.Length && !string.IsNullOrEmpty(names[i]))
+                {
+                    ComponentTooltipContent.tooltip = names[i];
+
+                    GUI.Button(iconRect, ComponentTooltipContent, _tooltipOnlyStyle);
+                }
 
                 iconRect = iconRect.MoveX(PreviewComponentIconSize + PreviewComponentIconGap);
             }
@@ -983,6 +993,8 @@ namespace Kingfisher.KClipboard
             _emptyBodyStyle = new GUIStyle(EditorStyles.miniLabel) { alignment = TextAnchor.UpperCenter, wordWrap = true };
 
             _previewBodyStyle = new GUIStyle { padding = new RectOffset(PreviewPadding, PreviewPadding, PreviewPadding, PreviewPadding) };
+
+            _tooltipOnlyStyle = new GUIStyle();
 
             _iconButtonStyle = new GUIStyle(EditorStyles.iconButton)
             {

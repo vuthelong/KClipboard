@@ -148,11 +148,14 @@ namespace Kingfisher.KClipboard
         // heuristic is needed here.
         private static KClipboardGameObjectsData.PreviewNode BuildPreviewNode(GameObject gameObject)
         {
+            GetComponentInfo(gameObject, out var componentIconNames, out var componentNames);
+
             var node = new KClipboardGameObjectsData.PreviewNode
             {
                 name = gameObject.name,
                 iconName = GetGameObjectIconName(gameObject),
-                componentIconNames = GetComponentIconNames(gameObject),
+                componentIconNames = componentIconNames,
+                componentNames = componentNames,
             };
 
             var transform = gameObject.transform;
@@ -195,10 +198,11 @@ namespace Kingfisher.KClipboard
         // this only affects what the preview shows, not what gets copied: the actual clone in
         // TryCaptureBlob operates on the real GameObject and includes every component regardless.
         // Reuses the Component sub-tool's own icon derivation for consistency.
-        private static string[] GetComponentIconNames(GameObject gameObject)
+        private static void GetComponentInfo(GameObject gameObject, out string[] iconNames, out string[] names)
         {
             var components = gameObject.GetComponents<Component>();
-            var iconNames = new List<string>(components.Length);
+            var iconNameList = new List<string>(components.Length);
+            var nameList = new List<string>(components.Length);
 
             for (var i = 0; i < components.Length; i++)
             {
@@ -206,10 +210,12 @@ namespace Kingfisher.KClipboard
                 if (components[i] is Transform) continue;
                 if ((components[i].hideFlags & HideFlags.HideInInspector) != 0) continue;
 
-                iconNames.Add(KClipboardComponents.GetIconName(components[i]));
+                iconNameList.Add(KClipboardComponents.GetIconName(components[i]));
+                nameList.Add(components[i].GetType().Name);
             }
 
-            return iconNames.ToArray();
+            iconNames = iconNameList.ToArray();
+            names = nameList.ToArray();
         }
 
         #endregion
