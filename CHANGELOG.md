@@ -11,14 +11,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `GameObject > Copy to K-Clipboard History` (also available from the
   Hierarchy right-click menu) copies the selected GameObject(s) - including
-  their full hierarchy - via Unity's own internal GameObject copy/paste
-  mechanism, and pushes them onto a new, separate persisted history stack.
+  their full hierarchy - and pushes them onto a new, separate persisted
+  history stack. Implemented via a temporary `.prefab` asset under
+  `Assets/KClipboardTemp` (created and deleted within the same call) rather
+  than Unity's native Editor copy/paste command, which has no public API to
+  read back what it captures and so can't be persisted.
 - **Tools > Kingfisher > K-Clipboard > GameObject History** window, mirroring
   the Component history's pin/paste/delete UX, plus a **Copy Selection**
-  toolbar button. Paste works with or without a GameObject selected -
-  placement follows Unity's native Hierarchy-paste behavior for the current
-  selection.
+  toolbar button. Paste works with or without a GameObject selected - pasted
+  roots land as children of the current selection, or at the scene root
+  otherwise.
+- A resizable preview pane for GameObject entries showing a read-only,
+  collapsible tree of the copied hierarchy's names and icons, captured by
+  walking the hierarchy at copy time rather than decoding the stored data.
+- The preview tree has zebra-striped rows, indent-guide lines connecting each
+  row to its parent (dimensions and color matched directly against
+  K-Hierarchy's own `DrawHierarchyLines`, not approximated), a component
+  minimap (per-row component icons, Transform excluded), and a path bar
+  showing the hovered row's full path within the copied hierarchy.
 - A second, independent history-cap setting for the GameObject history.
+
+### Fixed
+
+- The GameObject history's row-count caches could desync from the entry list
+  after a domain reload (a private, non-serialized version counter happened
+  to reset to the same value on both sides), causing an
+  `IndexOutOfRangeException` the next time the window repainted. Change
+  detection now also checks the cache length directly.
+- Every preview tree node now always shows a GameObject icon before its name,
+  falling back to the generic GameObject icon instead of leaving it blank -
+  and icon names are now resolved via `EditorGUIUtility.IconContent` instead
+  of `EditorGUIUtility.FindTexture`, since names captured through
+  `ObjectContent` (the API used to derive them) are not reliably resolvable
+  through `FindTexture`, a different and older icon lookup API.
+- GameObject copy silently produced no data (or pasted whatever Unity's
+  internal pasteboard happened to still hold from the same session, not
+  necessarily the requested entry) - `EditorGUIUtility.systemCopyBuffer` is
+  the OS text clipboard, unrelated to the buffer
+  `Unsupported.CopyGameObjectsToPasteboard` actually writes to. See Added.
 
 ### Changed
 

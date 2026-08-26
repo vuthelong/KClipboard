@@ -36,20 +36,27 @@ combined settings window.
 
 - **GameObject > Copy to K-Clipboard History** - also available from the
   Hierarchy's right-click menu - copies the selected GameObject(s), including
-  their full hierarchy, via Unity's own internal GameObject copy/paste
-  mechanism, and pushes them onto a separate persisted history stack
+  their full hierarchy, and pushes them onto a separate persisted history
+  stack. Internally this round-trips through a temporary `.prefab` asset
+  (Unity's own hierarchy/reference serializer) rather than Unity's native
+  Editor copy/paste command, which has no public way to read back what it
+  captured - see Limitations
 - **Tools > Kingfisher > K-Clipboard > GameObject History** lists the stack the
   same way, with a **Copy Selection** toolbar button as an alternative to the
   menu item
 - Hover an entry to slide out its **paste** and **delete** buttons - paste
-  works with or without a GameObject selected, since pasting at the scene root
-  is a legitimate target too; placement follows Unity's native Hierarchy-paste
-  behavior for whatever is currently selected
+  works with or without a GameObject selected: pasted roots land as children
+  of the selected GameObject, or at the active scene's root otherwise
 - Entries show the copied GameObject's name, or "N GameObjects" for a
   multi-selection copy (hover for the full list of names)
-- No live-editable preview pane here - unlike a component's values, a copied
-  GameObject's stored data is an opaque blob (see Limitations), so there is
-  nothing to decode into an editable Inspector
+- Select an entry to open a resizable preview pane showing a read-only,
+  collapsible tree of the copied hierarchy's names and icons - captured at
+  copy time, not decoded from the stored data (see Limitations), so there is
+  nothing to edit here
+- The preview tree has zebra-striped rows, indent-guide lines connecting each
+  row to its parent, a component minimap (small icons per row for every
+  component on that GameObject, Transform excluded), and a path bar at the
+  bottom showing the hovered row's full path within the copied hierarchy
 
 ### Both
 
@@ -76,11 +83,21 @@ here is compiled into player builds.
 > another copy alongside the existing ones.
 
 > [!NOTE]
-> **GameObject History** paste placement (child of the current selection vs.
-> scene root, and whether the original local transform is preserved) is
-> Unity's own native Hierarchy-paste behavior for whatever is selected at
-> paste time - K-Clipboard doesn't control or override it, the same way it
-> wouldn't if you pasted manually with Ctrl+V.
+> **GameObject History** copy/paste is implemented via a temporary `.prefab`
+> asset, created under `Assets/KClipboardTemp` and deleted again within the
+> same Copy or Paste call - not Unity's native Editor GameObject copy/paste
+> command. That command (`Unsupported.CopyGameObjectsToPasteboard`) writes to
+> an internal buffer with no public API to read the data back out, so it
+> can't be persisted into a history stack; the temporary-prefab round-trip is
+> the closest fully-public equivalent that preserves the hierarchy and
+> internal references between components correctly. One consequence: since
+> paste no longer goes through Unity's own paste command, pasted roots always
+> land as children of the current selection (or the scene root) rather than
+> mimicking whatever placement a manual Ctrl+V would have chosen.
+>
+> The preview pane shows names and icons only, not component values - it's
+> captured by walking the hierarchy at copy time, not decoded from the stored
+> prefab data.
 
 ## Install
 
@@ -138,6 +155,13 @@ of your project, next to `Assets/` and `Packages/` - not into the tool's
 folder, so it survives updating or re-cloning the repository. Component and
 GameObject history are separate files in that folder, so clearing or deleting
 one never touches the other.
+
+GameObject History also uses `Assets/KClipboardTemp` as scratch space for a
+temporary `.prefab` asset - it's created and deleted again within the same
+Copy or Paste action, so it should normally sit empty between operations. It
+has to live under `Assets/` (Unity's asset pipeline can't import anything
+outside it), so it's a real, VCS-visible folder unlike `.KData` - add it to
+your own `.gitignore` if you'd rather not see it show up in diffs.
 
 The folder carries a `.gitignore` of its own that excludes everything inside it,
 so it stays out of version control without your project's `.gitignore` needing

@@ -139,11 +139,20 @@ namespace Kingfisher.KClipboard
         [Serializable]
         public class HistoryEntry
         {
-            public string[] rootNames;
+            public PreviewNode[] previewRoots;
             public string iconName;
-            public string pasteboardBlob;
+            public string prefabBlob;
             public long timestampTicks;
             public bool pinned;
+        }
+
+        [Serializable]
+        public class PreviewNode
+        {
+            public string name;
+            public string iconName;
+            public string[] componentIconNames;
+            public List<PreviewNode> children = new();
         }
 
         #endregion
