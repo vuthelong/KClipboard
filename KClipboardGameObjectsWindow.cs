@@ -258,6 +258,7 @@ namespace Kingfisher.KClipboard
             ApplyPendingCopySelection();
             ApplyPendingClearHistory();
             RepaintOnHoverChange();
+            HandleExternalDrag();
         }
 
         private void OnSelectionChange() => Repaint();
@@ -729,6 +730,51 @@ namespace Kingfisher.KClipboard
             this._draggedEntry = null;
             this._draggedLabelContent = null;
             this._isDraggingRow = false;
+        }
+
+        #endregion
+
+        #region External Drag
+
+        private void HandleExternalDrag()
+        {
+            var currentEvent = CurEvent;
+
+            if (!currentEvent.IsDragUpdate && !currentEvent.IsDragPerform) return;
+            if (KClipboardMenu.PluginDisabled) return;
+            if (!TryGetDraggedGameObjects(out var gameObjects)) return;
+
+            DragAndDrop.visualMode = DragAndDropVisualMode.Copy;
+
+            if (currentEvent.IsDragUpdate)
+            {
+                currentEvent.Use();
+
+                return;
+            }
+
+            DragAndDrop.AcceptDrag();
+
+            if (!KClipboardGameObjects.CopySelectionToHistory(gameObjects, out var message))
+                Debug.LogError(string.Format(PasteFailureLogFormat, message));
+
+            currentEvent.Use();
+
+            Repaint();
+        }
+
+        private static bool TryGetDraggedGameObjects(out GameObject[] gameObjects)
+        {
+            var objectReferences = DragAndDrop.objectReferences;
+            var list = new List<GameObject>(objectReferences.Length);
+
+            for (var i = 0; i < objectReferences.Length; i++)
+                if (objectReferences[i] is GameObject gameObject)
+                    list.Add(gameObject);
+
+            gameObjects = list.ToArray();
+
+            return gameObjects.Length > 0;
         }
 
         #endregion

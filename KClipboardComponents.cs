@@ -40,6 +40,13 @@ namespace Kingfisher.KClipboard
             if (KClipboardMenu.PluginDisabled) return;
             if (command.context is not Component component) return;
 
+            CopyComponentToHistory(component);
+        }
+
+        public static void CopyComponentToHistory(Component component)
+        {
+            if (component == null) return;
+
             ComponentUtility.CopyComponent(component);
 
             PushToHistory(component);

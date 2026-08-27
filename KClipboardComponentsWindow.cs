@@ -247,6 +247,7 @@ namespace Kingfisher.KClipboard
             ApplyPendingPin();
             ApplyPendingRemoval();
             RepaintOnHoverChange();
+            HandleExternalDrag();
         }
 
         private void OnSelectionChange()
@@ -727,6 +728,53 @@ namespace Kingfisher.KClipboard
             this._draggedFromIndex = NoIndex;
             this._draggedEntry = null;
             this._isDraggingRow = false;
+        }
+
+        #endregion
+
+        #region External Drag
+
+        private void HandleExternalDrag()
+        {
+            var currentEvent = CurEvent;
+
+            if (!currentEvent.IsDragUpdate && !currentEvent.IsDragPerform) return;
+            if (KClipboardMenu.PluginDisabled) return;
+            if (!TryGetDraggedComponents(out var components)) return;
+
+            DragAndDrop.visualMode = DragAndDropVisualMode.Copy;
+
+            if (currentEvent.IsDragUpdate)
+            {
+                currentEvent.Use();
+
+                return;
+            }
+
+            DragAndDrop.AcceptDrag();
+
+            for (var i = 0; i < components.Count; i++)
+                KClipboardComponents.CopyComponentToHistory(components[i]);
+
+            currentEvent.Use();
+
+            Repaint();
+        }
+
+        private static bool TryGetDraggedComponents(out List<Component> components)
+        {
+            components = null;
+
+            var objectReferences = DragAndDrop.objectReferences;
+
+            for (var i = 0; i < objectReferences.Length; i++)
+            {
+                if (objectReferences[i] is not Component component) continue;
+
+                (components ??= new List<Component>()).Add(component);
+            }
+
+            return components != null;
         }
 
         #endregion
