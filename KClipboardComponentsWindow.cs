@@ -90,6 +90,8 @@ namespace Kingfisher.KClipboard
         private const float PreviewLabelWidthRatio = .4f;
         private const float MinPreviewLabelWidth = 110f;
         private const float DividerThickness = 1f;
+        private const float PreviewFadeHeight = 12f;
+        private const float PreviewFadeAlpha = .25f;
         private const float ListBottomPadding = 50f;
         private const float MinPreviewHeaderHeight = 22f;
         private const float PreviewIconSize = 16f;
@@ -102,6 +104,7 @@ namespace Kingfisher.KClipboard
 
         private static readonly Color DividerColorDark = Greyscale(.13f);
         private static readonly Color DividerColorLight = Greyscale(.6f);
+        private static readonly Color PreviewFadeColor = Greyscale(0f, PreviewFadeAlpha);
         private static readonly Color RowEvenColorDark = Greyscale(.249f);
         private static readonly Color RowEvenColorLight = Greyscale(.82f);
         private static readonly Color RowOddColorDark = Greyscale(.228f);
@@ -302,7 +305,15 @@ namespace Kingfisher.KClipboard
 
             if (paneHeight <= 0f) return;
 
+            DrawListFade(listRect);
             DrawPreview(new Rect(rect.x, rect.yMax - paneHeight, rect.width, paneHeight));
+        }
+
+        private static void DrawListFade(Rect listRect)
+        {
+            if (!CurEvent.IsRepaint) return;
+
+            listRect.SetHeightFromBottom(PreviewFadeHeight).DrawCurtainUp(PreviewFadeColor);
         }
 
         private float GetPreviewHeight(float bodyHeight)
@@ -795,7 +806,9 @@ namespace Kingfisher.KClipboard
 
             if (labelX >= rect.xMax) return;
 
-            GUI.Label(new Rect(labelX, rect.y, rect.xMax - labelX, rect.height), this._previewTitleContent.text);
+            var labelHeight = EditorGUIUtility.singleLineHeight;
+
+            GUI.Label(new Rect(labelX, rect.y + (rect.height - labelHeight) * .5f, rect.xMax - labelX, labelHeight), this._previewTitleContent.text);
         }
 
         private void DrawSaveButton(Rect rect)
