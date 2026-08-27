@@ -87,6 +87,28 @@ namespace Kingfisher.KClipboard
             MarkChanged();
         }
 
+        public HistoryEntry DetachEntry(int index)
+        {
+            if (!index.IsInRangeOf(this.entries)) return null;
+
+            var entry = this.entries[index];
+
+            this.entries.RemoveAt(index);
+
+            MarkChanged();
+
+            return entry;
+        }
+
+        public void InsertEntry(HistoryEntry entry, int index)
+        {
+            if (entry == null) return;
+
+            this.entries.Insert(index.Clamp(0, this.entries.Count), entry);
+
+            MarkChanged();
+        }
+
         public void Clear()
         {
             for (var i = this.entries.Count - 1; i >= 0; i--)

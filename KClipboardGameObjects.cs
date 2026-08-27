@@ -363,6 +363,22 @@ namespace Kingfisher.KClipboard
             Libs.KData.Flush();
         }
 
+        public static KClipboardGameObjectsData.HistoryEntry DetachEntryForReorder(int index)
+        {
+            var entry = EnsureData().DetachEntry(index);
+
+            Libs.KData.Flush();
+
+            return entry;
+        }
+
+        public static void InsertEntryForReorder(KClipboardGameObjectsData.HistoryEntry entry, int index)
+        {
+            EnsureData().InsertEntry(entry, index);
+
+            Libs.KData.Flush();
+        }
+
         public static void ClearHistory()
         {
             EnsureData().Clear();

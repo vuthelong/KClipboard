@@ -60,6 +60,10 @@ namespace Kingfisher.KClipboard
         private const float MaxDeltaTime = .05f;
         private const float FallbackDeltaTime = .0166f;
 
+        private const float DragStartDistance = 2f; // KFavorites.cs DragStartDistance - min pointer travel before a row press becomes a reorder drag instead of a click
+        private const float RowGapLerpSpeed = 10f; // KFavorites.cs RowGapLerpSpeed - same speed the reference list uses to animate its drop-target gap open/closed
+        private const float RowGapSnapAmount = .1f;
+
         private const float MinWindowWidth = 360f;
         private const float MinWindowHeight = 240f;
         private const float Padding = 4f;
@@ -181,6 +185,16 @@ namespace Kingfisher.KClipboard
         private bool _isResizingPreview;
         private bool _isMouseOverList;
 
+        private readonly List<float> _rowGaps = new();
+
+        private int _pressedIndex = NoIndex;
+        private int _draggedFromIndex = NoIndex;
+        private Vector2 _rowPressPosition;
+        private float _draggedRowHoldOffset;
+        private bool _isDraggingRow;
+        private KClipboardGameObjectsData.HistoryEntry _draggedEntry;
+        private GUIContent _draggedLabelContent;
+
         #endregion
 
         #region Property
@@ -208,6 +222,12 @@ namespace Kingfisher.KClipboard
             KClipboardGameObjects.EnsureData();
 
             wantsMouseMove = true;
+        }
+
+        private void OnDisable()
+        {
+            if (this._isDraggingRow)
+                CancelDragRow();
         }
 
         private void OnGUI()
@@ -289,19 +309,19 @@ namespace Kingfisher.KClipboard
         {
             GUILayout.BeginArea(rect);
 
-            if (Entries.Count == 0)
+            if (Entries.Count == 0 && !this._isDraggingRow)
                 DrawEmptyMessage(new Rect(0f, 0f, rect.width, rect.height));
             else
-                DrawScrolledRows();
+                DrawScrolledRows(rect.width);
 
             GUILayout.EndArea();
         }
 
-        private void DrawScrolledRows()
+        private void DrawScrolledRows(float width)
         {
             this._scroll = EditorGUILayout.BeginScrollView(this._scroll, GUIStyle.none, GUIStyle.none);
 
-            DrawRows();
+            DrawRows(width);
 
             GUILayout.Space(ListBottomPadding);
 
@@ -328,15 +348,27 @@ namespace Kingfisher.KClipboard
             ResetGUIEnabled();
         }
 
-        private void DrawRows()
+        private void DrawRows(float width)
         {
             if (CurEvent.IsRepaint)
                 this._hoveredIndex = NoIndex;
 
             var entries = Entries;
+            var gaps = AnimateRowGaps(entries.Count);
 
             for (var i = 0; i < entries.Count; i++)
+            {
+                GUILayout.Space(gaps[i]);
+
                 DrawRow(entries[i], this._timeLabels[i], this._labelContents[i], i);
+            }
+
+            GUILayout.Space(gaps[entries.Count]);
+
+            if (this._isDraggingRow)
+                DrawDraggedRow(width);
+
+            HandleRowReorder();
         }
 
         private void DrawRow(KClipboardGameObjectsData.HistoryEntry entry, string timeLabel, GUIContent labelContent, int index)
@@ -344,9 +376,9 @@ namespace Kingfisher.KClipboard
             var rowRect = GUILayoutUtility.GetRect(0f, RowHeight, ExpandWidthOptions);
             var actionsAmount = index == this._animatedActionsIndex ? this._actionsAmount : 0f;
 
-            DrawRowBackground(rowRect, index, entry == this._selectedEntry, actionsAmount);
+            DrawRowBackground(rowRect, entry == this._selectedEntry, actionsAmount);
 
-            if (CurEvent.IsRepaint && this._isMouseOverList && rowRect.IsHovered())
+            if (CurEvent.IsRepaint && this._isMouseOverList && !this._isDraggingRow && rowRect.IsHovered())
                 this._hoveredIndex = index;
 
             var contentRect = new Rect(rowRect.x + Padding, rowRect.y + RowPadding, rowRect.width - Padding * 2f, rowRect.height - RowPadding * 2f);
@@ -355,14 +387,35 @@ namespace Kingfisher.KClipboard
 
             DrawEntry(contentRect, entry, timeLabel, labelContent, index);
             DrawActionButtons(rowRect, entry, index, actionsAmount);
-            HandleRowClick(rowRect, entry);
+            HandleRowClick(rowRect, entry, index);
         }
 
-        private static void DrawRowBackground(Rect rowRect, int index, bool isSelected, float actionsAmount)
+        private void DrawDraggedRow(float width)
+        {
+            var rowRect = new Rect(0f, GetDraggedRowY(), width, RowHeight);
+
+            DrawRowBackground(rowRect, false, 0f);
+
+            if (CurEvent.IsRepaint)
+                _selectedRowStyle?.Draw(rowRect, false, false, true, true);
+
+            var contentRect = new Rect(rowRect.x + Padding, rowRect.y + RowPadding, rowRect.width - Padding * 2f, rowRect.height - RowPadding * 2f);
+            var iconX = contentRect.x + LabelIndent;
+            var labelX = iconX + RowIconSize + ActionGap;
+            var labelWidth = Mathf.Max(contentRect.xMax - labelX, 0f);
+
+            DrawRowIcon(new Rect(iconX, contentRect.y + (EditorGUIUtility.singleLineHeight - RowIconSize) * .5f, RowIconSize, RowIconSize));
+
+            GUI.Label(new Rect(labelX, contentRect.y, labelWidth, EditorGUIUtility.singleLineHeight), this._draggedLabelContent);
+        }
+
+        private float GetDraggedRowY() => Mathf.Max(CurEvent.MousePosition.y - RowHeight * .5f + this._draggedRowHoldOffset, 0f);
+
+        private static void DrawRowBackground(Rect rowRect, bool isSelected, float actionsAmount)
         {
             if (!CurEvent.IsRepaint) return;
 
-            rowRect.Draw(index % 2 == 0 ? RowEvenColor : RowOddColor);
+            rowRect.Draw(Lerp(RowEvenColor, RowOddColor, rowRect.y.PingPong(RowHeight) / RowHeight));
 
             if (!isSelected) return;
 
@@ -492,17 +545,168 @@ namespace Kingfisher.KClipboard
             ResetGUIColor();
         }
 
-        private void HandleRowClick(Rect rowRect, KClipboardGameObjectsData.HistoryEntry entry)
+        private void HandleRowClick(Rect rowRect, KClipboardGameObjectsData.HistoryEntry entry, int index)
         {
+            if (this._isDraggingRow) return;
             if (!this._isMouseOverList) return;
-            if (!CurEvent.IsMouseDown) return;
-            if (CurEvent.MouseButton != LeftMouseButton) return;
-            if (!rowRect.IsHovered()) return;
+
+            if (CurEvent.IsMouseDown && CurEvent.MouseButton == LeftMouseButton && rowRect.IsHovered())
+            {
+                this._pressedIndex = index;
+                this._rowPressPosition = CurEvent.MousePosition;
+
+                CurEvent.Use();
+
+                return;
+            }
+
+            if (!CurEvent.IsMouseUp) return;
+            if (this._pressedIndex != index) return;
+
+            this._pressedIndex = NoIndex;
 
             CurEvent.Use();
 
             this._pendingSelection = this._selectedEntry == entry ? null : entry;
             this._hasPendingSelection = true;
+        }
+
+        #endregion
+
+        #region Reorder
+
+        private List<float> AnimateRowGaps(int rowCount)
+        {
+            var gaps = GetRowGaps(rowCount);
+
+            if (!CurEvent.IsLayout) return gaps;
+
+            var targetIndex = this._isDraggingRow ? GetInsertIndex(rowCount) : NoIndex;
+            var isSettled = true;
+
+            for (var i = 0; i < gaps.Count; i++)
+            {
+                var target = i == targetIndex ? RowHeight : 0f;
+
+                gaps[i] = Lerp(gaps[i], target, RowGapLerpSpeed, this._deltaTime);
+
+                if (Mathf.Abs(target - gaps[i]) < RowGapSnapAmount)
+                    gaps[i] = target;
+                else
+                    isSettled = false;
+            }
+
+            if (this._isDraggingRow || !isSettled)
+                Repaint();
+
+            return gaps;
+        }
+
+        private List<float> GetRowGaps(int rowCount)
+        {
+            while (this._rowGaps.Count < rowCount + 1) this._rowGaps.Add(0f);
+            while (this._rowGaps.Count > rowCount + 1) this._rowGaps.RemoveLast();
+
+            return this._rowGaps;
+        }
+
+        private int GetInsertIndex(int rowCount) => ((CurEvent.MousePosition.y + this._draggedRowHoldOffset) / RowHeight).FloorToInt().Clamp(0, rowCount);
+
+        private void HandleRowReorder()
+        {
+            if (this._pressedIndex == NoIndex && !this._isDraggingRow) return;
+
+            var currentEvent = CurEvent;
+
+            if (!currentEvent.IsNull && currentEvent.Type == EventType.MouseLeaveWindow)
+            {
+                if (this._isDraggingRow) CancelDragRow();
+                else this._pressedIndex = NoIndex;
+
+                return;
+            }
+
+            if (!this._isDraggingRow)
+            {
+                if (!currentEvent.IsMouseDrag) return;
+                if (currentEvent.MousePosition.DistanceTo(this._rowPressPosition) < DragStartDistance) return;
+
+                BeginDragRow();
+
+                return;
+            }
+
+            if (!currentEvent.IsMouseUp) return;
+
+            AcceptDragRow();
+        }
+
+        private void BeginDragRow()
+        {
+            var entry = KClipboardGameObjects.DetachEntryForReorder(this._pressedIndex);
+
+            if (entry == null)
+            {
+                this._pressedIndex = NoIndex;
+
+                return;
+            }
+
+            this._draggedFromIndex = this._pressedIndex;
+            this._draggedEntry = entry;
+            this._draggedLabelContent = BuildLabelContent(entry);
+            this._draggedRowHoldOffset = this._pressedIndex * RowHeight + RowHeight * .5f - this._rowPressPosition.y;
+            this._isDraggingRow = true;
+
+            this._hoveredIndex = NoIndex;
+            this._animatedActionsIndex = NoIndex;
+            this._actionsAmount = 0f;
+
+            GetRowGaps(Entries.Count)[this._pressedIndex] = RowHeight;
+
+            CurEvent.Use();
+
+            Repaint();
+        }
+
+        private void AcceptDragRow()
+        {
+            var insertIndex = GetInsertIndex(Entries.Count);
+            var gaps = GetRowGaps(Entries.Count);
+
+            gaps[insertIndex] -= RowHeight;
+            gaps.AddAt(0f, insertIndex);
+
+            KClipboardGameObjects.InsertEntryForReorder(this._draggedEntry, insertIndex);
+
+            EndDragRow();
+
+            CurEvent.Use();
+
+            Repaint();
+        }
+
+        private void CancelDragRow()
+        {
+            var gaps = GetRowGaps(Entries.Count);
+
+            gaps[this._draggedFromIndex] -= RowHeight;
+            gaps.AddAt(0f, this._draggedFromIndex);
+
+            KClipboardGameObjects.InsertEntryForReorder(this._draggedEntry, this._draggedFromIndex);
+
+            EndDragRow();
+
+            Repaint();
+        }
+
+        private void EndDragRow()
+        {
+            this._pressedIndex = NoIndex;
+            this._draggedFromIndex = NoIndex;
+            this._draggedEntry = null;
+            this._draggedLabelContent = null;
+            this._isDraggingRow = false;
         }
 
         #endregion
@@ -845,6 +1049,7 @@ namespace Kingfisher.KClipboard
 
         private void ValidateSelection()
         {
+            if (this._isDraggingRow) return; // the dragged entry is briefly detached from Entries - don't drop its selection/preview mid-drag
             if (this._selectedEntry == null) return;
             if (Entries.Contains(this._selectedEntry)) return;
 
