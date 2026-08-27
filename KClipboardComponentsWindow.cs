@@ -57,9 +57,11 @@ namespace Kingfisher.KClipboard
         private const float MaxDeltaTime = .05f;
         private const float FallbackDeltaTime = .0166f;
 
-        private const float DragStartDistance = 2f; // KFavorites.cs DragStartDistance - min pointer travel before a row press becomes a reorder drag instead of a click
-        private const float RowGapLerpSpeed = 10f; // KFavorites.cs RowGapLerpSpeed - same speed the reference list uses to animate its drop-target gap open/closed
+        private const float DragStartDistance = 2f;
+        private const float RowGapLerpSpeed = 10f;
         private const float RowGapSnapAmount = .1f;
+        private const float SelectedGradientWidthRatio = .77f;
+        private const float SelectedGradientFlatOverlapWidth = 1f;
 
         private const float MinWindowWidth = 360f;
         private const float MinWindowHeight = 240f;
@@ -104,6 +106,8 @@ namespace Kingfisher.KClipboard
         private static readonly Color RowEvenColorLight = Greyscale(.82f);
         private static readonly Color RowOddColorDark = Greyscale(.228f);
         private static readonly Color RowOddColorLight = Greyscale(.85f);
+        private static readonly Color SelectedRowColorDark = new(.17f, .365f, .535f);
+        private static readonly Color SelectedRowColorLight = new Color(.2f, .375f, .555f) * 1.2f;
         private static readonly Color PinnedIconColor = Greyscale(1f);
         private static readonly Color UnpinnedIconColor = Greyscale(1f, UnpinnedIconAlpha);
         private static readonly Color ActionIconColorDark = Greyscale(ActionIconBrightnessDark);
@@ -188,6 +192,8 @@ namespace Kingfisher.KClipboard
         private static Color RowEvenColor => IsDarkTheme ? RowEvenColorDark : RowEvenColorLight;
 
         private static Color RowOddColor => IsDarkTheme ? RowOddColorDark : RowOddColorLight;
+
+        private static Color SelectedRowColor => IsDarkTheme ? SelectedRowColorDark : SelectedRowColorLight;
 
         private static Color ActionIconColor => IsDarkTheme ? ActionIconColorDark : ActionIconColorLight;
 
@@ -430,7 +436,12 @@ namespace Kingfisher.KClipboard
 
             if (highlightRect.width <= 0f) return;
 
-            _selectedRowStyle?.Draw(highlightRect, false, false, true, true);
+            var gradientWidth = highlightRect.width * SelectedGradientWidthRatio;
+            var gradientRect = highlightRect.SetWidthFromRight(gradientWidth);
+            var flatRect = highlightRect.SetXMax(gradientRect.x + SelectedGradientFlatOverlapWidth);
+
+            flatRect.Draw(SelectedRowColor);
+            gradientRect.DrawCurtainRight(SelectedRowColor);
         }
 
         private void DrawEntry(Rect contentRect, KClipboardComponentsData.HistoryEntry entry, string timeLabel, int index)
@@ -986,7 +997,7 @@ namespace Kingfisher.KClipboard
 
         private void ValidateSelection()
         {
-            if (this._isDraggingRow) return; // the dragged entry is briefly detached from Entries - don't drop its selection/preview mid-drag
+            if (this._isDraggingRow) return;
             if (this._selectedEntry == null) return;
             if (Entries.Contains(this._selectedEntry)) return;
 
