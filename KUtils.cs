@@ -11,6 +11,12 @@ using UnityEngine;
 using Type = System.Type;
 using Object = UnityEngine.Object;
 
+#if UNITY_6000_3_OR_NEWER
+using InstanceId = UnityEngine.EntityId;
+#else
+using InstanceId = System.Int32;
+#endif
+
 namespace Kingfisher.KClipboard.Libs
 {
     public static class KUtils
@@ -539,14 +545,14 @@ namespace Kingfisher.KClipboard.Libs
 
         #region Compatibility
 
-        public static Object LoadedObjectFromInstanceId(int instanceId) =>
+        public static Object LoadedObjectFromInstanceId(InstanceId instanceId) =>
 #if UNITY_6000_3_OR_NEWER
             Resources.EntityIdToObject(instanceId);
 #else
             Resources.InstanceIDToObject(instanceId);
 #endif
 
-        public static int GlobalIdToInstanceId(GlobalObjectId globalId) =>
+        public static InstanceId GlobalIdToInstanceId(GlobalObjectId globalId) =>
 #if UNITY_6000_3_OR_NEWER
             GlobalObjectId.GlobalObjectIdentifierToEntityIdSlow(globalId);
 #else
@@ -661,7 +667,7 @@ namespace Kingfisher.KClipboard.Libs
 
             public Object GetObject() => GlobalObjectId.GlobalObjectIdentifierToObjectSlow(ObjectId);
 
-            public int GetObjectInstanceId() => GlobalIdToInstanceId(ObjectId);
+            public InstanceId GetObjectInstanceId() => GlobalIdToInstanceId(ObjectId);
 
             public bool Equals(GlobalID other) => string.Equals(this.globalObjectIdString, other.globalObjectIdString, StringComparison.Ordinal);
 
